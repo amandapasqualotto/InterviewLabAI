@@ -18,8 +18,28 @@ TIMEOUT_SEGUNDOS = 30
 _MODELO_OK = None
 
 
+MSG_CHAVE_INVALIDA = (
+    "O Google recusou a chave do Gemini (401 UNAUTHENTICATED). Isso não é problema de modelo: "
+    "a chave está inválida, incompleta ou é de um tipo que o Gemini não aceita. "
+    "Gere uma nova chave em https://aistudio.google.com/apikey, cole-a inteira (sem aspas extras "
+    "nem espaços) em GEMINI_API_KEY nos Secrets do Streamlit e reinicie o app."
+)
+
+
+def _erro_de_chave(msg: str) -> bool:
+    """True quando o erro é de autenticação: trocar de modelo não adianta."""
+    m = msg.upper()
+    return ("401" in m or "UNAUTHENTICATED" in m or "API KEY NOT VALID" in m
+            or "API_KEY_INVALID" in m or "ACCESS_TOKEN_TYPE_UNSUPPORTED" in m)
+
+
+def _limpar_chave(key: str) -> str:
+    """Remove espaços, quebras de linha e aspas que costumam vir ao colar a chave."""
+    return (key or "").strip().strip('"').strip("'").strip()
+
+
 def get_client(api_key: str = None):
-    key = api_key or os.getenv("GEMINI_API_KEY")
+    key = _limpar_chave(api_key or os.getenv("GEMINI_API_KEY"))
     if not key:
         raise ValueError("Chave GEMINI_API_KEY não encontrada.")
     return genai.Client(
@@ -76,6 +96,10 @@ def _config_rapida(config, model_name):
         return config
 
 
+class _ChaveInvalida(Exception):
+    pass
+
+
 def _gerar(client, contents, config=None):
     """Tenta gerar conteúdo percorrendo modelos. Retorna (texto, erros)."""
     global _MODELO_OK
@@ -101,20 +125,25 @@ def _gerar(client, contents, config=None):
             except Exception as e:
                 msg = str(e)
                 erros.append(f"{model_name}: {msg}")
+                if _erro_de_chave(msg):
+                    raise _ChaveInvalida(msg)
                 # Só repete sem a config de 'thinking' se o erro for sobre isso
                 if "thinking" not in msg.lower():
                     return None
         return None
 
-    for nome in _ordem_modelos():
-        texto = tentar(nome)
-        if texto:
-            return texto, erros
+    try:
+        for nome in _ordem_modelos():
+            texto = tentar(nome)
+            if texto:
+                return texto, erros
 
-    for nome in _descobrir_modelos(client):
-        texto = tentar(nome)
-        if texto:
-            return texto, erros
+        for nome in _descobrir_modelos(client):
+            texto = tentar(nome)
+            if texto:
+                return texto, erros
+    except _ChaveInvalida:
+        return None, [MSG_CHAVE_INVALIDA] + erros[-1:]
 
     return None, erros
 
@@ -246,6 +275,9 @@ def stream_chat_lapidacao(client, historico_mensagens: list, contexto_vaga: dict
                         return
                     msg = str(e)
                     erros.append(f"{nome}: {msg}")
+                    if _erro_de_chave(msg):
+                        yield MSG_CHAVE_INVALIDA
+                        return
                     if "thinking" not in msg.lower():
                         break
 
