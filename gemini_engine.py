@@ -228,33 +228,30 @@ def _montar_chat(historico_mensagens, contexto_vaga, pergunta, parecer_anterior)
     return system_instruction, contents
 
 
-def stream_chat_lapidacao(client, historico_mensagens: list, contexto_vaga: dict,
-                          pergunta: str, parecer_anterior: str):
-    """
-    Gerador que devolve o texto aos poucos (streaming), então a resposta
-    começa a aparecer em poucos segundos. Use com st.write_stream().
-    """
-    global _MODELO_OK
-    system_instruction, contents = _montar_chat(historico_mensagens, contexto_vaga, pergunta, parecer_anterior)
+FALHA_CHAT = "Não foi possível gerar a resposta do chat no momento."
+MARCADOR_RESPOSTA = "✦ Sua resposta pronta"
 
-    config_busca = types.GenerateContentConfig(
-        system_instruction=system_instruction,
-        tools=[types.Tool(google_search=types.GoogleSearch())],
-    )
+
+def resposta_falhou(texto) -> bool:
+    """True quando o texto devolvido pelo chat é uma mensagem de erro (não deve ser salvo)."""
+    t = str(texto or "")
+    return t.startswith(FALHA_CHAT) or t.startswith(MSG_CHAVE_INVALIDA)
+
+
+def _stream(client, system_instruction, contents, permitir_busca=True):
+    """Streaming com troca automática de modelo. Primeiro sem busca na web (mais rápido)."""
+    global _MODELO_OK
     config_simples = types.GenerateContentConfig(system_instruction=system_instruction)
+    configs = [(False, config_simples)]
+    if permitir_busca:
+        configs.append((True, types.GenerateContentConfig(
+            system_instruction=system_instruction,
+            tools=[types.Tool(google_search=types.GoogleSearch())],
+        )))
 
     erros = []
-    tentados = set()
-    modelos = _ordem_modelos()
-
-    # Primeiro tenta SEM busca (mais rápido); a busca fica como segunda opção
-    for usar_busca in (False, True):
-        base = config_busca if usar_busca else config_simples
-        for nome in modelos:
-            chave = (nome, usar_busca)
-            if chave in tentados:
-                continue
-            tentados.add(chave)
+    for _, base in configs:
+        for nome in _ordem_modelos():
             for cfg in (_config_rapida(base, nome), base):
                 emitiu = False
                 try:
@@ -271,8 +268,7 @@ def stream_chat_lapidacao(client, historico_mensagens: list, contexto_vaga: dict
                     break
                 except Exception as e:
                     if emitiu:
-                        # Já mostrou parte do texto; encerra sem repetir
-                        return
+                        return  # já mostrou parte do texto; encerra sem repetir
                     msg = str(e)
                     erros.append(f"{nome}: {msg}")
                     if _erro_de_chave(msg):
@@ -281,7 +277,79 @@ def stream_chat_lapidacao(client, historico_mensagens: list, contexto_vaga: dict
                     if "thinking" not in msg.lower():
                         break
 
-    yield "Não foi possível gerar a resposta do chat no momento. Detalhes:\n\n" + "\n\n".join(erros)
+    yield FALHA_CHAT + " Detalhes:\n\n" + "\n\n".join(erros)
+
+
+def stream_chat_lapidacao(client, historico_mensagens: list, contexto_vaga: dict,
+                          pergunta: str, parecer_anterior: str):
+    """Chat da Etapa 3 (lapidação a partir do parecer). Use com st.write_stream()."""
+    system_instruction, contents = _montar_chat(historico_mensagens, contexto_vaga, pergunta, parecer_anterior)
+    yield from _stream(client, system_instruction, contents)
+
+
+def stream_chat_mentor(client, historico_mensagens: list, contexto_vaga: dict = None,
+                       pergunta_foco: str = None):
+    """
+    Mentor livre: conversa ANTES do treino, para ajudar o candidato a encontrar
+    exemplos e montar a resposta do zero. Funciona com ou sem vaga cadastrada.
+    """
+    ctx = contexto_vaga or {}
+    if ctx.get("empresa"):
+        bloco_vaga = f"""
+    VAGA QUE O CANDIDATO ESTÁ PREPARANDO (use como referência, sem inventar fatos):
+    - Empresa: {ctx.get('empresa', '')}
+    - Cargo: {ctx.get('cargo', '')}
+    - Descrição: {ctx.get('descricao', '')}
+    - Sobre a empresa: {ctx.get('sobre_empresa', '') or 'Não informado'}
+    - Currículo: {ctx.get('curriculo_texto', '') or 'Não informado'}
+    """
+    else:
+        bloco_vaga = "\n    O candidato ainda não cadastrou uma vaga. Ajude de forma geral e, se fizer sentido, pergunte para qual vaga ele se prepara.\n"
+
+    foco = (f'\n    PERGUNTA QUE ELE QUER TREINAR: "{pergunta_foco}"\n'
+            if pergunta_foco else "")
+
+    system_instruction = f"""
+    Você é o Mentor do Interview Lab AI: um mentor de carreira sênior, caloroso, elegante e direto.
+    O candidato está conversando com você ANTES de treinar no simulador, porque ainda não tem
+    uma resposta pronta. Seu papel é ajudá-lo a descobrir bons exemplos na própria trajetória e
+    transformá-los em uma resposta de entrevista forte.
+    {bloco_vaga}{foco}
+    COMO CONDUZIR:
+    1. Faça perguntas curtas, uma ou duas por vez, para extrair situações reais, números e resultados.
+       Nunca invente experiências, empresas ou métricas: use apenas o que o candidato contar.
+    2. Escolha a técnica certa: STAR (Situação, Tarefa, Ação, Resultado) para perguntas comportamentais;
+       pitch Passado-Presente-Futuro para apresentação pessoal; exemplo prático + aplicação para aprendizado.
+    3. Quando tiver material suficiente, entregue a resposta completa, em primeira pessoa, natural para
+       falar em voz alta (cerca de 1 a 2 minutos), dentro deste formato exato:
+
+    ---
+    #### {MARCADOR_RESPOSTA}
+    (a resposta aqui, em parágrafos)
+
+    ---
+
+    4. Depois da resposta, em uma linha, sugira levá-la ao Treinador para receber o parecer técnico.
+    5. Responda sempre em português do Brasil, com frases claras e sem excesso de jargão.
+    """
+    contents = []
+    for msg in historico_mensagens:
+        role = "user" if msg.get("role") == "user" else "model"
+        texto = str(msg.get("content", "")).strip()
+        if texto:
+            contents.append(types.Content(role=role, parts=[types.Part.from_text(text=texto)]))
+    yield from _stream(client, system_instruction, contents, permitir_busca=False)
+
+
+def extrair_resposta_pronta(texto: str) -> str:
+    """Pega a resposta que o mentor marcou como pronta; se não houver marcação, devolve ''."""
+    texto = str(texto or "")
+    if MARCADOR_RESPOSTA not in texto:
+        return ""
+    trecho = texto.split(MARCADOR_RESPOSTA, 1)[1]
+    trecho = trecho.split("\n---", 1)[0]
+    linhas = [l for l in trecho.strip().splitlines() if not l.strip().startswith("#")]
+    return "\n".join(linhas).strip().strip("*").strip()
 
 
 def simular_chat_lapidacao_com_busca(client, historico_mensagens: list, contexto_vaga: dict,
