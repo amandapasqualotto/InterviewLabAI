@@ -50,7 +50,7 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Cinzel:wght@400;500;600&family=Jost:wght@300;400;500&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Cinzel:wght@500;600;700&family=Jost:wght@400;500;600&display=swap');
 
     :root {
         --floresta: #111E16;
@@ -74,7 +74,10 @@ st.markdown("""
             repeating-linear-gradient(0deg, rgba(120,100,70,0.018) 0px, rgba(120,100,70,0.018) 1px, transparent 1px, transparent 3px);
         color: var(--tinta);
         font-family: 'Jost', sans-serif;
-        font-weight: 300;
+        font-weight: 400;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+        text-rendering: optimizeLegibility;
     }
     .stApp p, .stApp li, .stApp label, .stMarkdown { font-family: 'Jost', sans-serif; }
     h1 span, h2 span, h3 span, h4 span { font-family: inherit !important; }
@@ -86,26 +89,27 @@ st.markdown("""
         font-weight: 600 !important;
         letter-spacing: 0.01em;
     }
-    h3 { font-size: 2rem !important; font-style: italic; font-weight: 500 !important; }
+    h3 { font-size: 2.1rem !important; font-style: italic; font-weight: 600 !important; }
     h4 { font-size: 1.35rem !important; }
     strong, b { font-weight: 500; color: var(--floresta); }
 
     /* Rótulos dos campos em versalete */
     [data-testid="stWidgetLabel"] p {
-        font-family: 'Cinzel', serif !important;
-        font-size: 0.74rem !important;
-        letter-spacing: 0.14em;
+        font-family: 'Jost', sans-serif !important;
+        font-size: 0.76rem !important;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
         color: var(--musgo) !important;
-        font-weight: 500;
+        font-weight: 600 !important;
     }
 
     /* Elementos decorativos */
     .kicker {
-        font-family: 'Cinzel', serif;
-        letter-spacing: 0.32em;
+        font-family: 'Jost', sans-serif;
+        letter-spacing: 0.28em;
         text-transform: uppercase;
-        font-size: 0.72rem;
+        font-size: 0.74rem;
+        font-weight: 600;
         color: var(--ouro);
         margin: 0;
     }
@@ -135,7 +139,7 @@ st.markdown("""
         padding: 16px 20px; margin: 10px 0 22px 0;
     }
     .cartao-metodo .rot {
-        font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.16em; color: var(--floresta);
+        font-family: 'Jost', sans-serif; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.14em; color: var(--floresta);
     }
     .cartao-metodo .txt { font-size: 0.95rem; color: #4A4236; }
 
@@ -147,9 +151,9 @@ st.markdown("""
         border-radius: 1px;
         padding: 0.7rem 1.5rem;
         font-family: 'Cinzel', serif;
-        font-weight: 500;
-        font-size: 0.78rem;
-        letter-spacing: 0.16em;
+        font-weight: 700;
+        font-size: 0.82rem;
+        letter-spacing: 0.12em;
         text-transform: uppercase;
         width: 100%;
         box-shadow: inset 0 0 0 3px var(--floresta), inset 0 0 0 4px rgba(201,169,110,0.35);
@@ -161,7 +165,7 @@ st.markdown("""
         color: #FFF8E7;
         box-shadow: inset 0 0 0 3px var(--musgo), inset 0 0 0 4px rgba(201,169,110,0.6);
     }
-    .stButton>button p { font-family: 'Cinzel', serif !important; }
+    .stButton>button p { font-family: 'Cinzel', serif !important; font-weight: 700 !important; font-size: 0.82rem; }
 
     /* Contêiner dos botões ocupa a coluna toda (para o alinhamento funcionar) */
     .st-key-btn_toggle_cad, .st-key-btn_voltar_login1, .st-key-btn_voltar_login2,
@@ -206,20 +210,20 @@ st.markdown("""
     div[class*="st-key-sug_"] button {
         text-transform: none !important; letter-spacing: 0.01em !important;
         font-family: 'Cormorant Garamond', serif !important; font-size: 1.05rem !important;
-        font-style: italic; min-height: 74px; background-color: var(--marfim) !important;
+        font-style: italic; font-weight: 600 !important; min-height: 74px; background-color: var(--marfim) !important;
     }
     div[class*="st-key-sug_"] button p {
-        font-family: 'Cormorant Garamond', serif !important; font-size: 1.12rem !important;
+        font-family: 'Cormorant Garamond', serif !important; font-size: 1.18rem !important; font-weight: 600 !important;
         white-space: normal !important; overflow: visible !important; text-overflow: clip !important;
         line-height: 1.35;
     }
 
     /* Link 'Esqueci minha senha' */
     .link-esqueci {
-        color: var(--sepia); font-size: 0.88rem; text-decoration: none;
+        color: #5E5547 !important; font-size: 0.92rem; text-decoration: none !important;
         border-bottom: 1px solid var(--filete); cursor: pointer; transition: color 0.2s ease;
     }
-    .link-esqueci:hover { color: var(--floresta); border-color: var(--ouro); }
+    .link-esqueci:hover { color: var(--floresta) !important; border-color: var(--ouro); }
 
     /* ---------- Campos ---------- */
     div[data-baseweb="input"], div[data-baseweb="textarea"], div[data-baseweb="select"] > div,
@@ -273,8 +277,8 @@ st.markdown("""
     }
     .st-key-menu_principal div[role="radiogroup"] label p,
     .st-key-etapa_radio_main div[role="radiogroup"] label p {
-        font-family: 'Cinzel', serif !important; letter-spacing: 0.18em; text-transform: uppercase;
-        font-size: 0.8rem !important; color: var(--sepia);
+        font-family: 'Cinzel', serif !important; letter-spacing: 0.12em; text-transform: uppercase;
+        font-size: 0.84rem !important; font-weight: 600 !important; color: var(--sepia);
     }
     .st-key-menu_principal div[role="radiogroup"] label:has(input:checked),
     .st-key-etapa_radio_main div[role="radiogroup"] label:has(input:checked) {
@@ -282,7 +286,7 @@ st.markdown("""
         background: linear-gradient(180deg, transparent, rgba(168,131,74,0.08));
     }
     .st-key-menu_principal div[role="radiogroup"] label:has(input:checked) p,
-    .st-key-etapa_radio_main div[role="radiogroup"] label:has(input:checked) p { color: var(--floresta); font-weight: 600; }
+    .st-key-etapa_radio_main div[role="radiogroup"] label:has(input:checked) p { color: var(--floresta); font-weight: 700 !important; }
     .st-key-menu_principal { margin-bottom: 1.6rem; }
     .st-key-menu_principal div[role="radiogroup"] label p { font-size: 0.9rem !important; }
     .st-key-etapa_radio_main { margin-bottom: 1.2rem; }
@@ -302,7 +306,7 @@ st.markdown("""
     div[data-testid="stChatInput"] > div { border-color: var(--filete) !important; border-radius: 2px !important; background: var(--marfim); }
 
     /* Abas internas (Histórico) e expanders */
-    button[data-baseweb="tab"] p { font-family: 'Cinzel', serif !important; letter-spacing: 0.1em; font-size: 0.78rem !important; }
+    button[data-baseweb="tab"] p { font-family: 'Cinzel', serif !important; font-weight: 600 !important; letter-spacing: 0.08em; font-size: 0.82rem !important; }
     div[data-baseweb="tab-highlight"] { background-color: var(--ouro) !important; }
     div[data-testid="stExpander"] details { border: 1px solid var(--filete); border-radius: 2px; background: var(--marfim); }
 
@@ -319,7 +323,7 @@ st.markdown("""
     div[class*="st-key-sim_"] button:hover { background-color: #571F1C !important; }
 
     .ident-conectado { text-align: right; padding-top: 0.8rem; margin-bottom: 0.4rem; }
-    .ident-conectado .nome { font-family: 'Cormorant Garamond', serif; font-size: 1.35rem; font-style: italic; color: var(--floresta); }
+    .ident-conectado .nome { font-family: 'Cormorant Garamond', serif; font-size: 1.45rem; font-weight: 600; font-style: italic; color: var(--floresta); }
 
     /* ===== Celular / tablet ===== */
     @media (max-width: 768px) {
@@ -329,7 +333,7 @@ st.markdown("""
         .block-container { padding: 2.5rem 1rem 5rem 1rem !important; }
         h3 { font-size: 1.6rem !important; }
         .titulo-login { font-size: 2.6rem !important; }
-        .kicker { letter-spacing: 0.18em !important; font-size: 0.64rem !important; }
+        .kicker { letter-spacing: 0.16em !important; font-size: 0.68rem !important; }
         .titulo-app { font-size: 2rem !important; }
         .subtitulo-app { font-size: 0.85rem !important; }
         .ident-conectado { text-align: left !important; padding-top: 0.4rem !important; }
@@ -339,7 +343,7 @@ st.markdown("""
         .st-key-menu_principal div[role="radiogroup"] label,
         .st-key-etapa_radio_main div[role="radiogroup"] label { padding: 0.6rem 0.8rem; }
         .st-key-menu_principal div[role="radiogroup"] label p,
-        .st-key-etapa_radio_main div[role="radiogroup"] label p { font-size: 0.68rem !important; letter-spacing: 0.1em; }
+        .st-key-etapa_radio_main div[role="radiogroup"] label p { font-size: 0.72rem !important; letter-spacing: 0.06em; }
     }
 
     #MainMenu {visibility: hidden;}
@@ -828,8 +832,8 @@ if not st.session_state["usuario_logado"]:
     <div style="text-align: center; padding: 2rem 0 1.5rem 0;">
         <div style="margin-bottom: 1.1rem;">{logo_html(88)}</div>
         <p class="kicker">Atelier de Entrevistas · Est. MMXXVI</p>
-        <h1 class="titulo-login" style="font-size: 4rem; font-style: italic; font-weight: 500 !important; margin: 0.3rem 0 0 0; line-height: 1.05;">Interview Lab AI</h1>
-        <p style="font-family: 'Cormorant Garamond', serif; font-size: 1.25rem; font-style: italic; color: #7A6F5E; margin-top: 0.4rem;">A arte de contar a sua trajetória</p>
+        <h1 class="titulo-login" style="font-size: 4rem; font-style: italic; font-weight: 600 !important; margin: 0.3rem 0 0 0; line-height: 1.05;">Interview Lab AI</h1>
+        <p style="font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; font-weight: 500; font-style: italic; color: #6E6352; margin-top: 0.4rem;">A arte de contar a sua trajetória</p>
         <div style="max-width: 320px; margin: 0 auto;">{ornamento()}</div>
     </div>
     """, unsafe_allow_html=True)
@@ -868,7 +872,7 @@ if not st.session_state["usuario_logado"]:
             st.markdown("""
             <div style="margin: 2rem 0 0.5rem 0; text-align: center;">
                 <hr style="border: none; border-top: 1px solid rgba(168,131,74,0.38); margin-bottom: 1.5rem;">
-                <p style="font-size: 0.92rem; color: #7A6F5E; margin-bottom: 0.4rem; font-family: 'Cormorant Garamond', serif; font-style: italic;">Ainda não possui um acesso?</p>
+                <p style="font-size: 0.95rem; color: #6E6352; margin-bottom: 0.5rem;">Ainda não possui um acesso?</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -943,15 +947,15 @@ with col_head1:
         {logo_html(72)}
         <div>
             <p class="kicker">Atelier de Entrevistas</p>
-            <h1 class="titulo-app" style="font-size: 2.7rem; font-style: italic; font-weight: 500 !important; margin: 0; line-height: 1.1;">Interview Lab AI</h1>
-            <p class="subtitulo-app" style="color: #7A6F5E; font-size: 1.1rem; margin-top: 0; font-family: 'Cormorant Garamond', serif; font-style: italic;">Simulação e lapidação narrativa para entrevistas</p>
+            <h1 class="titulo-app" style="font-size: 2.7rem; font-style: italic; font-weight: 600 !important; margin: 0; line-height: 1.1;">Interview Lab AI</h1>
+            <p class="subtitulo-app" style="color: #7A6F5E; font-size: 1.25rem; font-weight: 500; margin-top: 0; font-family: 'Cormorant Garamond', serif; font-style: italic;">Simulação e lapidação narrativa para entrevistas</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
 with col_head2:
     st.markdown(
         f"<div class='ident-conectado'>"
-        f"<span class='kicker' style='font-size:0.62rem;'>Bem-vindo(a)</span><br>"
+        f"<span class='kicker' style='font-size:0.68rem;'>Bem-vindo(a)</span><br>"
         f"<span class='nome'>{st.session_state.get('usuario_nome', 'Candidato')}</span></div>",
         unsafe_allow_html=True
     )
@@ -1039,7 +1043,7 @@ if menu_atual == MENU_MENTOR:
 
     if not mensagens:
         st.markdown(
-            "<p style='text-align:center; font-family:Cormorant Garamond, serif; font-size:1.3rem; "
+            "<p style='text-align:center; font-family:Cormorant Garamond, serif; font-size:1.4rem; font-weight:500; "
             "font-style:italic; color:#7A6F5E; margin-bottom:1rem;'>Por onde gostaria de começar?</p>",
             unsafe_allow_html=True,
         )
