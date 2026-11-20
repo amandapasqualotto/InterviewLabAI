@@ -5,10 +5,11 @@ from google.genai import types
 from curadoria import INSIGHTS_GERAIS
 
 # Modelos tentados em ordem. Pode sobrescrever com a variável/secret GEMINI_MODEL.
+# Os modelos "lite" respondem bem mais rápido; ficam na frente.
 MODELOS_PREFERIDOS = [
+    "gemini-3.5-flash-lite",
+    "gemini-3.5-flash",
     "gemini-3.8-flash",
-    "gemini-flash-latest",
-    "gemini-2.5-flash-lite",
 ]
 
 # Tempo máximo (segundos) de cada chamada à API. Evita o "pensando para sempre".
@@ -16,6 +17,18 @@ TIMEOUT_SEGUNDOS = 30
 
 # Guarda o último modelo que funcionou para não testar os outros toda vez.
 _MODELO_OK = None
+
+# Modelos que a API disse não existir (404): não são tentados de novo nesta execução.
+_MODELOS_INDISPONIVEIS = set()
+
+
+def _registrar_falha(nome: str, msg: str):
+    global _MODELO_OK
+    m = msg.upper()
+    if "404" in m or "NOT_FOUND" in m or "NO LONGER AVAILABLE" in m:
+        _MODELOS_INDISPONIVEIS.add(nome)
+    if _MODELO_OK == nome and ("504" in m or "DEADLINE" in m or "503" in m or "UNAVAILABLE" in m):
+        _MODELO_OK = None  # estava lento/fora: volta a testar a lista
 
 
 MSG_CHAVE_INVALIDA = (
@@ -56,10 +69,11 @@ def _descobrir_modelos(client):
             acoes = getattr(m, "supported_actions", None) or []
             nome = (getattr(m, "name", "") or "").replace("models/", "")
             if "generateContent" in acoes and "flash" in nome:
-                if any(x in nome for x in ("image", "tts", "live", "audio", "embedding")):
+                if any(x in nome for x in ("image", "tts", "live", "audio", "embedding", "preview", "exp")):
                     continue
                 nomes.append(nome)
-        return sorted(set(nomes), reverse=True)
+        # mais novos primeiro e, entre eles, os "lite" (mais rápidos) na frente
+        return sorted(set(nomes), key=lambda n: (n.split("-")[1] if "-" in n else "", "lite" in n), reverse=True)
     except Exception:
         return []
 
@@ -74,7 +88,7 @@ def _ordem_modelos():
     ordem.extend(MODELOS_PREFERIDOS)
     vistos, final = set(), []
     for m in ordem:
-        if m not in vistos:
+        if m not in vistos and m not in _MODELOS_INDISPONIVEIS:
             vistos.add(m)
             final.append(m)
     return final
@@ -108,7 +122,7 @@ def _gerar(client, contents, config=None):
 
     def tentar(model_name):
         global _MODELO_OK
-        if model_name in tentados:
+        if model_name in tentados or model_name in _MODELOS_INDISPONIVEIS:
             return None
         tentados.add(model_name)
         for cfg in (_config_rapida(config, model_name), config):
@@ -127,6 +141,7 @@ def _gerar(client, contents, config=None):
                 erros.append(f"{model_name}: {msg}")
                 if _erro_de_chave(msg):
                     raise _ChaveInvalida(msg)
+                _registrar_falha(model_name, msg)
                 # Só repete sem a config de 'thinking' se o erro for sobre isso
                 if "thinking" not in msg.lower():
                     return None
@@ -240,44 +255,66 @@ def resposta_falhou(texto) -> bool:
 
 def _stream(client, system_instruction, contents, permitir_busca=True):
     """Streaming com troca automática de modelo. Primeiro sem busca na web (mais rápido)."""
-    global _MODELO_OK
     config_simples = types.GenerateContentConfig(system_instruction=system_instruction)
-    configs = [(False, config_simples)]
+    configs = [config_simples]
     if permitir_busca:
-        configs.append((True, types.GenerateContentConfig(
+        configs.append(types.GenerateContentConfig(
             system_instruction=system_instruction,
             tools=[types.Tool(google_search=types.GoogleSearch())],
-        )))
+        ))
 
     erros = []
-    for _, base in configs:
-        for nome in _ordem_modelos():
-            for cfg in (_config_rapida(base, nome), base):
-                emitiu = False
-                try:
-                    for chunk in client.models.generate_content_stream(
-                        model=nome, contents=contents, config=cfg
-                    ):
-                        if chunk and chunk.text:
-                            emitiu = True
-                            yield chunk.text
-                    if emitiu:
-                        _MODELO_OK = nome
-                        return
-                    erros.append(f"{nome}: resposta vazia")
-                    break
-                except Exception as e:
-                    if emitiu:
-                        return  # já mostrou parte do texto; encerra sem repetir
-                    msg = str(e)
-                    erros.append(f"{nome}: {msg}")
-                    if _erro_de_chave(msg):
-                        yield MSG_CHAVE_INVALIDA
-                        return
-                    if "thinking" not in msg.lower():
-                        break
+
+    def tentar(nome, base):
+        """Gera os pedaços de texto; devolve via exceção _Pronto quando terminar com sucesso."""
+        global _MODELO_OK
+        for cfg in (_config_rapida(base, nome), base):
+            emitiu = False
+            try:
+                for chunk in client.models.generate_content_stream(model=nome, contents=contents, config=cfg):
+                    if chunk and chunk.text:
+                        emitiu = True
+                        yield chunk.text
+                if emitiu:
+                    _MODELO_OK = nome
+                    raise _Pronto()
+                erros.append(f"{nome}: resposta vazia")
+                return
+            except _Pronto:
+                raise
+            except Exception as e:
+                if emitiu:
+                    raise _Pronto()  # já mostrou parte do texto; encerra sem repetir
+                msg = str(e)
+                erros.append(f"{nome}: {msg}")
+                if _erro_de_chave(msg):
+                    raise _ChaveInvalida(msg)
+                _registrar_falha(nome, msg)
+                if "thinking" not in msg.lower():
+                    return
+
+    try:
+        for base in configs:
+            tentados = set()
+            for nome in _ordem_modelos():
+                tentados.add(nome)
+                yield from tentar(nome, base)
+            for nome in _descobrir_modelos(client):
+                if nome in tentados or nome in _MODELOS_INDISPONIVEIS:
+                    continue
+                tentados.add(nome)
+                yield from tentar(nome, base)
+    except _Pronto:
+        return
+    except _ChaveInvalida:
+        yield MSG_CHAVE_INVALIDA
+        return
 
     yield FALHA_CHAT + " Detalhes:\n\n" + "\n\n".join(erros)
+
+
+class _Pronto(Exception):
+    pass
 
 
 def stream_chat_lapidacao(client, historico_mensagens: list, contexto_vaga: dict,
