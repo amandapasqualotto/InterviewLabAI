@@ -169,7 +169,7 @@ st.markdown("""
 
     /* Contêiner dos botões ocupa a coluna toda (para o alinhamento funcionar) */
     .st-key-btn_toggle_cad, .st-key-btn_voltar_login1, .st-key-btn_voltar_login2,
-    .st-key-btn_logout, .st-key-btn_historico {
+    .st-key-btn_logout, div[class*="st-key-btn_historico"] {
         width: 100% !important; max-width: 100% !important;
     }
     .st-key-btn_toggle_cad div[data-testid="stButton"],
@@ -178,13 +178,13 @@ st.markdown("""
         display: flex !important; justify-content: center !important; width: 100% !important;
     }
     .st-key-btn_logout div[data-testid="stButton"],
-    .st-key-btn_historico div[data-testid="stButton"] {
+    div[class*="st-key-btn_historico"] div[data-testid="stButton"] {
         display: flex !important; justify-content: flex-end !important; width: 100% !important;
     }
 
     /* Botões secundários: contorno dourado */
     .st-key-btn_toggle_cad button, .st-key-btn_voltar_login1 button, .st-key-btn_voltar_login2 button,
-    .st-key-btn_historico button, .st-key-btn_logout button,
+    div[class*="st-key-btn_historico"] button, .st-key-btn_logout button,
     div[class*="st-key-sec_"] button, div[class*="st-key-sug_"] button, div[class*="st-key-nao_"] button {
         background-color: transparent !important;
         color: var(--floresta) !important;
@@ -195,14 +195,14 @@ st.markdown("""
         width: 260px !important; max-width: 100% !important;
     }
     .st-key-btn_toggle_cad button:hover, .st-key-btn_voltar_login1 button:hover,
-    .st-key-btn_voltar_login2 button:hover, .st-key-btn_historico button:hover,
+    .st-key-btn_voltar_login2 button:hover, div[class*="st-key-btn_historico"] button:hover,
     .st-key-btn_logout button:hover, div[class*="st-key-sec_"] button:hover,
     div[class*="st-key-sug_"] button:hover, div[class*="st-key-nao_"] button:hover {
         background-color: rgba(168,131,74,0.10) !important;
         border-color: var(--ouro) !important;
         color: var(--floresta) !important;
     }
-    .st-key-btn_logout button, .st-key-btn_historico button {
+    .st-key-btn_logout button, div[class*="st-key-btn_historico"] button {
         width: auto !important; padding: 0.45rem 1.1rem;
     }
 
@@ -305,6 +305,15 @@ st.markdown("""
     div[data-testid="stChatInput"] textarea { font-family: 'Jost', sans-serif; }
     div[data-testid="stChatInput"] > div { border-color: var(--filete) !important; border-radius: 2px !important; background: var(--marfim); }
 
+    /* Janela do histórico */
+    div[role="dialog"] {
+        background-color: var(--marfim) !important;
+        border: 1px solid var(--filete) !important;
+        border-radius: 2px !important;
+        box-shadow: inset 0 0 0 6px var(--marfim), inset 0 0 0 7px rgba(168,131,74,0.22), 0 20px 50px rgba(30,25,15,0.25) !important;
+    }
+    div[role="dialog"] h2 { font-style: italic; }
+
     /* Abas internas (Histórico) e expanders */
     button[data-baseweb="tab"] p { font-family: 'Cinzel', serif !important; font-weight: 600 !important; letter-spacing: 0.08em; font-size: 0.82rem !important; }
     div[data-baseweb="tab-highlight"] { background-color: var(--ouro) !important; }
@@ -338,7 +347,7 @@ st.markdown("""
         .subtitulo-app { font-size: 0.85rem !important; }
         .ident-conectado { text-align: left !important; padding-top: 0.4rem !important; }
         .st-key-btn_logout div[data-testid="stButton"],
-        .st-key-btn_historico div[data-testid="stButton"] { justify-content: flex-start !important; }
+        div[class*="st-key-btn_historico"] div[data-testid="stButton"] { justify-content: flex-start !important; }
         .stButton>button { min-height: 46px; }
         .st-key-menu_principal div[role="radiogroup"] label,
         .st-key-etapa_radio_main div[role="radiogroup"] label { padding: 0.6rem 0.8rem; }
@@ -556,7 +565,7 @@ def carregar_sessao(user, email):
     ctx = dict(user.get("contexto_vaga") or {})
     historico = ctx.pop("_historico", None)
     ativa = ctx.pop("_vaga_ativa", None)
-    ss["chat_livre"] = list(ctx.pop("_chat_livre", None) or [])
+    carregar_mentor(ctx)
 
     if historico is None:
         historico = []
@@ -595,12 +604,90 @@ def carregar_sessao(user, email):
     ss["menu_principal"] = MENU_MENTOR
 
 
+# ============================================================
+# HISTÓRICO DO MENTOR (conversas livres)
+# ============================================================
+def titulo_conversa(mensagens):
+    primeira = next((m["content"] for m in mensagens if m["role"] == "user"), "Conversa")
+    primeira = " ".join(str(primeira).split())
+    return primeira[:70] + ("…" if len(primeira) > 70 else "")
+
+
+def carregar_mentor(ctx):
+    """Lê as conversas do Mentor (migrando a conversa única do formato antigo)."""
+    ss = st.session_state
+    convs = ctx.pop("_mentor_conversas", None)
+    ativa = ctx.pop("_mentor_ativa", None)
+    antiga = ctx.pop("_chat_livre", None)
+    convs = list(convs or [])
+    if antiga and not convs:
+        conv = {"id": novo_id(), "data": "Anterior", "titulo": titulo_conversa(antiga), "mensagens": list(antiga)}
+        convs.append(conv)
+        ativa = conv["id"]
+    ss["mentor_conversas"] = convs
+    atual = next((c for c in convs if c["id"] == ativa), None)
+    ss["mentor_conv_ativa"] = atual["id"] if atual else None
+    ss["chat_livre"] = list(atual["mensagens"]) if atual else []
+
+
+def sincronizar_mentor():
+    """Grava as mensagens da conversa aberta do Mentor no histórico."""
+    ss = st.session_state
+    msgs = list(ss.get("chat_livre", []))
+    convs = ss.setdefault("mentor_conversas", [])
+    conv = next((c for c in convs if c["id"] == ss.get("mentor_conv_ativa")), None)
+    if conv is None:
+        if not msgs:
+            return
+        conv = {"id": novo_id(), "data": agora_str(), "titulo": "", "mensagens": []}
+        convs.append(conv)
+        ss["mentor_conv_ativa"] = conv["id"]
+    conv["mensagens"] = msgs
+    conv["titulo"] = titulo_conversa(msgs)
+    conv["atualizada"] = agora_str()
+
+
+def nova_conversa_mentor():
+    ss = st.session_state
+    sincronizar_mentor()
+    ss["mentor_conv_ativa"] = None
+    ss["chat_livre"] = []
+    salvar_progresso_banco(ss["usuario_logado"])
+
+
+def retomar_conversa_mentor(conv_id):
+    ss = st.session_state
+    sincronizar_mentor()
+    conv = next((c for c in ss.get("mentor_conversas", []) if c["id"] == conv_id), None)
+    if conv:
+        ss["mentor_conv_ativa"] = conv["id"]
+        ss["chat_livre"] = list(conv["mensagens"])
+    salvar_progresso_banco(ss["usuario_logado"])
+    ss["_ir_para_menu"] = MENU_MENTOR
+    st.rerun()
+
+
+def excluir_conversa_mentor(conv_id):
+    ss = st.session_state
+    ss["mentor_conversas"] = [c for c in ss.get("mentor_conversas", []) if c["id"] != conv_id]
+    afeta = ss.get("mentor_conv_ativa") == conv_id
+    if afeta:
+        ss["mentor_conv_ativa"] = None
+        ss["chat_livre"] = []
+    salvar_progresso_banco(ss["usuario_logado"])
+    return afeta
+
+
 def salvar_progresso_banco(email):
     ss = st.session_state
     ctx = dict(ss.get("contexto_vaga", {}))
     ctx["_historico"] = ss.get("historico", [])
     ctx["_vaga_ativa"] = ss.get("vaga_ativa_id")
-    ctx["_chat_livre"] = ss.get("chat_livre", [])[-80:]  # conversa do Mentor (últimas 80 mensagens)
+    sincronizar_mentor()
+    ctx["_mentor_conversas"] = [
+        dict(c, mensagens=c["mensagens"][-80:]) for c in ss.get("mentor_conversas", [])[-30:]
+    ]  # até 30 conversas do Mentor, 80 mensagens cada
+    ctx["_mentor_ativa"] = ss.get("mentor_conv_ativa")
     vaga = vaga_ativa()
     dados = {
         "contexto_vaga": ctx,
@@ -731,7 +818,35 @@ def botao_excluir(chave, aviso, acao):
             st.rerun(scope="fragment")
 
 
-@st.dialog("Histórico", width="large")
+@st.dialog("Histórico do Mentor", width="large")
+def dialog_historico_mentor():
+    convs = [c for c in st.session_state.get("mentor_conversas", []) if c.get("mensagens")]
+    if not convs:
+        st.info("Suas conversas com o Mentor aparecerão aqui assim que você enviar a primeira mensagem.")
+        return
+    ativa = st.session_state.get("mentor_conv_ativa")
+    st.caption(f"{len(convs)} conversa(s) salva(s). Abra uma para reler, retomar de onde parou ou excluir.")
+    for cv in reversed(convs):
+        n = len(cv["mensagens"])
+        marca = "  · aberta agora" if cv["id"] == ativa else ""
+        data = cv.get("atualizada") or cv.get("data", "")
+        with st.expander(f"{data} · {cv.get('titulo') or 'Conversa'} ({n} msgs){marca}"):
+            for m in cv["mensagens"]:
+                with st.chat_message(m["role"], avatar=avatar_ia() if m["role"] == "assistant" else None):
+                    st.markdown(m["content"])
+            if cv["id"] != ativa:
+                if st.button("Retomar esta conversa", key=f"retm_{cv['id']}"):
+                    retomar_conversa_mentor(cv["id"])
+            else:
+                st.caption("Esta é a conversa aberta no Mentor.")
+            botao_excluir(
+                f"mconv_{cv['id']}",
+                "Excluir esta conversa do Mentor? Essa ação não pode ser desfeita.",
+                lambda cid=cv["id"]: excluir_conversa_mentor(cid),
+            )
+
+
+@st.dialog("Histórico do Treinador", width="large")
 def dialog_historico():
     historico = st.session_state.get("historico", [])
     if not historico:
@@ -899,6 +1014,8 @@ if not st.session_state["usuario_logado"]:
                             st.session_state["usuario_nome"] = novo_nome
                             st.session_state["historico"] = []
                             st.session_state["chat_livre"] = []
+                            st.session_state["mentor_conversas"] = []
+                            st.session_state["mentor_conv_ativa"] = None
                             limpar_vaga_ativa()
                             st.session_state["etapa_radio_main"] = ETAPA_1
                             st.rerun()
@@ -966,9 +1083,6 @@ with col_head2:
             pass
         st.session_state.clear()
         st.rerun()
-    if st.button("Histórico", key="btn_historico"):
-        st.session_state["_exc_pendente"] = None
-        dialog_historico()
 
 st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 
@@ -1010,13 +1124,23 @@ def levar_para_treinador(texto, pergunta):
 
 
 if menu_atual == MENU_MENTOR:
-    cabecalho_secao(
-        "Antes do treino",
-        "O Mentor",
-        "Ainda não tem uma resposta pronta? Converse à vontade: o mentor faz perguntas sobre a sua "
-        "trajetória, encontra os melhores exemplos e monta a resposta com você. Quando ela estiver "
-        "pronta, leve-a ao Treinador para receber o parecer técnico.",
-    )
+    col_t, col_h = st.columns([4, 1.5], gap="medium")
+    with col_t:
+        cabecalho_secao(
+            "Antes do treino",
+            "O Mentor",
+            "Ainda não tem uma resposta pronta? Converse à vontade: o mentor faz perguntas sobre a sua "
+            "trajetória, encontra os melhores exemplos e monta a resposta com você. Quando ela estiver "
+            "pronta, leve-a ao Treinador para receber o parecer técnico.",
+        )
+    with col_h:
+        st.markdown("<div style='height:1.4rem'></div>", unsafe_allow_html=True)
+        if st.button("Histórico do Mentor", key="btn_historico_mentor"):
+            st.session_state["_exc_pendente"] = None
+            dialog_historico_mentor()
+        if ss["chat_livre"] and st.button("Nova conversa", key="btn_historico_nova"):
+            nova_conversa_mentor()
+            st.rerun()
 
     vaga = vaga_ativa()
     col_a, col_b = st.columns([1.6, 1], gap="medium")
@@ -1076,7 +1200,7 @@ if menu_atual == MENU_MENTOR:
             mensagens.pop()  # não salva a falha; dá para tentar de novo
         else:
             mensagens.append({"role": "assistant", "content": str(resposta)})
-            salvar_progresso_banco(ss["usuario_logado"])
+            salvar_progresso_banco(ss["usuario_logado"])  # também atualiza o histórico do Mentor
             st.rerun()
 
     if any(m["role"] == "assistant" for m in mensagens):
@@ -1093,18 +1217,13 @@ if menu_atual == MENU_MENTOR:
                 "Sua resposta", value=pronta, height=200,
                 key=f"rascunho_mentor_{len(mensagens)}", label_visibility="collapsed",
             )
-            c1, c2 = st.columns([1.4, 1], gap="small")
+            c1, _ = st.columns([1.4, 1], gap="small")
             with c1:
                 if st.button("Levar para o Treinador ➔", key="btn_levar_treino"):
                     if not rascunho.strip():
                         st.warning("Escreva ou peça ao mentor uma resposta antes de levar ao Treinador.")
                     else:
                         levar_para_treinador(rascunho.strip(), pergunta_foco)
-            with c2:
-                if st.button("Nova conversa", key="sec_nova_conversa"):
-                    ss["chat_livre"] = []
-                    salvar_progresso_banco(ss["usuario_logado"])
-                    st.rerun()
 
     st.stop()
 
@@ -1124,12 +1243,19 @@ if destino in etapas_lista:
 if st.session_state.get("etapa_radio_main") not in etapas_lista:
     st.session_state["etapa_radio_main"] = etapas_lista[0]
 
-etapa_atual = st.radio(
-    "Navegação por Etapas:",
-    options=etapas_lista,
-    horizontal=True,
-    key="etapa_radio_main"
-)
+col_et, col_ht = st.columns([4, 1.5], gap="medium")
+with col_et:
+    etapa_atual = st.radio(
+        "Navegação por Etapas:",
+        options=etapas_lista,
+        horizontal=True,
+        key="etapa_radio_main"
+    )
+with col_ht:
+    st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+    if st.button("Histórico do Treinador", key="btn_historico"):
+        st.session_state["_exc_pendente"] = None
+        dialog_historico()
 
 # ============================================================
 # ETAPA 1 — CONTEXTO DA VAGA
