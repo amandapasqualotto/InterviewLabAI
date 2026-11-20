@@ -50,7 +50,7 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600&family=Cinzel:wght@500;600;700&family=Jost:wght@400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,600;0,700;1,600;1,700&family=Lora:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Cinzel:wght@500;600;700&family=Jost:wght@400;500;600&display=swap');
 
     :root {
         --floresta: #111E16;
@@ -89,8 +89,19 @@ st.markdown("""
         font-weight: 600 !important;
         letter-spacing: 0.01em;
     }
-    h3 { font-size: 2.1rem !important; font-style: italic; font-weight: 600 !important; }
-    h4 { font-size: 1.35rem !important; }
+    h3 { font-size: 2.2rem !important; font-style: italic; font-weight: 700 !important; }
+    /* Títulos menores e títulos dentro do chat/histórico: Lora, que fica nítida em qualquer tela */
+    h4, h5, h6,
+    div[data-testid="stChatMessage"] h1, div[data-testid="stChatMessage"] h2,
+    div[data-testid="stChatMessage"] h3, div[data-testid="stChatMessage"] h4,
+    div[role="dialog"] h2, div[data-testid="stExpander"] h3 {
+        font-family: 'Lora', serif !important; font-style: normal !important;
+        font-weight: 600 !important; letter-spacing: 0 !important;
+    }
+    h4 { font-size: 1.25rem !important; }
+    div[data-testid="stChatMessage"] h1, div[data-testid="stChatMessage"] h2,
+    div[data-testid="stChatMessage"] h3, div[data-testid="stChatMessage"] h4 { font-size: 1.15rem !important; }
+    .serifa { font-family: 'Lora', serif !important; font-style: italic; font-weight: 500; }
     strong, b { font-weight: 500; color: var(--floresta); }
 
     /* Rótulos dos campos em versalete */
@@ -122,7 +133,7 @@ st.markdown("""
         background: linear-gradient(90deg, transparent, var(--ouro-claro), transparent);
     }
     .ornamento span { font-size: 0.8rem; letter-spacing: 0.6em; padding-left: 0.6em; }
-    .intro-secao { color: var(--sepia); font-size: 0.98rem; margin: -0.4rem 0 1.4rem 0; line-height: 1.6; }
+    .intro-secao { color: #4F473B; font-size: 1rem; margin: -0.4rem 0 1.4rem 0; line-height: 1.6; }
 
     /* ---------- Cartões com moldura dupla ---------- */
     div[data-testid="stVerticalBlockBorderWrapper"], div[class*="st-key-moldura"] {
@@ -209,11 +220,12 @@ st.markdown("""
     /* Sugestões do mentor: texto corrido, sem caixa alta */
     div[class*="st-key-sug_"] button {
         text-transform: none !important; letter-spacing: 0.01em !important;
-        font-family: 'Cormorant Garamond', serif !important; font-size: 1.05rem !important;
-        font-style: italic; font-weight: 600 !important; min-height: 74px; background-color: var(--marfim) !important;
+        font-family: 'Lora', serif !important; font-size: 0.98rem !important;
+        font-style: normal; font-weight: 500 !important; min-height: 74px; background-color: var(--marfim) !important;
     }
     div[class*="st-key-sug_"] button p {
-        font-family: 'Cormorant Garamond', serif !important; font-size: 1.18rem !important; font-weight: 600 !important;
+        font-family: 'Lora', serif !important; font-size: 0.98rem !important; font-weight: 500 !important;
+        color: var(--floresta) !important;
         white-space: normal !important; overflow: visible !important; text-overflow: clip !important;
         line-height: 1.35;
     }
@@ -332,7 +344,7 @@ st.markdown("""
     div[class*="st-key-sim_"] button:hover { background-color: #571F1C !important; }
 
     .ident-conectado { text-align: right; padding-top: 0.8rem; margin-bottom: 0.4rem; }
-    .ident-conectado .nome { font-family: 'Cormorant Garamond', serif; font-size: 1.45rem; font-weight: 600; font-style: italic; color: var(--floresta); }
+    .ident-conectado .nome { font-family: 'Lora', serif; font-size: 1.15rem; font-weight: 500; font-style: italic; color: var(--floresta); }
 
     /* ===== Celular / tablet ===== */
     @media (max-width: 768px) {
@@ -947,8 +959,8 @@ if not st.session_state["usuario_logado"]:
     <div style="text-align: center; padding: 2rem 0 1.5rem 0;">
         <div style="margin-bottom: 1.1rem;">{logo_html(88)}</div>
         <p class="kicker">Atelier de Entrevistas · Est. MMXXVI</p>
-        <h1 class="titulo-login" style="font-size: 4rem; font-style: italic; font-weight: 600 !important; margin: 0.3rem 0 0 0; line-height: 1.05;">Interview Lab AI</h1>
-        <p style="font-family: 'Cormorant Garamond', serif; font-size: 1.4rem; font-weight: 500; font-style: italic; color: #6E6352; margin-top: 0.4rem;">A arte de contar a sua trajetória</p>
+        <h1 class="titulo-login" style="font-size: 4rem; font-style: italic; font-weight: 700 !important; margin: 0.3rem 0 0 0; line-height: 1.05;">Interview Lab AI</h1>
+        <p style="font-family: 'Lora', serif; font-size: 1.15rem; font-weight: 400; font-style: italic; color: #5E5547; margin-top: 0.4rem;">A arte de contar a sua trajetória</p>
         <div style="max-width: 320px; margin: 0 auto;">{ornamento()}</div>
     </div>
     """, unsafe_allow_html=True)
@@ -1064,8 +1076,8 @@ with col_head1:
         {logo_html(72)}
         <div>
             <p class="kicker">Atelier de Entrevistas</p>
-            <h1 class="titulo-app" style="font-size: 2.7rem; font-style: italic; font-weight: 600 !important; margin: 0; line-height: 1.1;">Interview Lab AI</h1>
-            <p class="subtitulo-app" style="color: #7A6F5E; font-size: 1.25rem; font-weight: 500; margin-top: 0; font-family: 'Cormorant Garamond', serif; font-style: italic;">Simulação e lapidação narrativa para entrevistas</p>
+            <h1 class="titulo-app" style="font-size: 2.7rem; font-style: italic; font-weight: 700 !important; margin: 0; line-height: 1.1;">Interview Lab AI</h1>
+            <p class="subtitulo-app" style="color: #5E5547; font-size: 1.02rem; font-weight: 400; margin-top: 0.1rem; font-family: 'Lora', serif; font-style: italic;">Simulação e lapidação narrativa para entrevistas</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
@@ -1167,8 +1179,8 @@ if menu_atual == MENU_MENTOR:
 
     if not mensagens:
         st.markdown(
-            "<p style='text-align:center; font-family:Cormorant Garamond, serif; font-size:1.4rem; font-weight:500; "
-            "font-style:italic; color:#7A6F5E; margin-bottom:1rem;'>Por onde gostaria de começar?</p>",
+            "<p style='text-align:center; font-family:Lora, serif; font-size:1.15rem; font-weight:400; "
+            "font-style:italic; color:#5E5547; margin-bottom:1rem;'>Por onde gostaria de começar?</p>",
             unsafe_allow_html=True,
         )
         cols = st.columns(len(SUGESTOES_MENTOR), gap="small")
