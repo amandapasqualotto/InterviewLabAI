@@ -309,8 +309,48 @@ st.markdown("""
         background-color: rgba(35,58,44,0.05);
     }
     div[data-testid="stChatMessage"] img { border-radius: 50%; }
+    div[data-testid="stChatMessage"] p, div[data-testid="stChatMessage"] li,
+    div[data-testid="stChatMessage"] span, div[data-testid="stChatMessage"] strong { color: var(--tinta) !important; }
+    div[data-testid="stBottom"], div[data-testid="stBottom"] > div,
+    div[data-testid="stBottomBlockContainer"] { background-color: var(--pergaminho) !important; }
+    div[data-testid="stChatInput"] textarea { color: var(--tinta) !important; }
+    div[data-testid="stChatInput"] textarea::placeholder { color: #8A7F6D !important; }
     div[data-testid="stChatInput"] textarea { font-family: 'Jost', sans-serif; }
     div[data-testid="stChatInput"] > div { border-color: var(--filete) !important; border-radius: 2px !important; background: var(--marfim); }
+
+    /* Menu "Conversas" do Mentor (popover) */
+    .espaco-menu-conversas { height: 1.5rem; }
+    .espaco-hist-treino { height: 1.6rem; }
+    div[data-testid="stChatMessageAvatarUser"] { background-color: var(--musgo) !important; color: #F1E6CC !important; }
+    div[class*="st-key-menu_conversas"] button {
+        background-color: transparent !important; color: var(--floresta) !important;
+        border: 1px solid var(--filete) !important; border-radius: 1px !important; box-shadow: none !important;
+        font-family: 'Cinzel', serif !important; font-weight: 700 !important; letter-spacing: 0.1em;
+        min-height: 44px;
+    }
+    div[class*="st-key-menu_conversas"] button p { font-family: 'Cinzel', serif !important; font-weight: 700 !important; font-size: 0.82rem !important; color: var(--floresta) !important; }
+    div[class*="st-key-menu_conversas"] button:hover { border-color: var(--ouro) !important; background-color: rgba(168,131,74,0.08) !important; }
+    div[data-testid="stPopoverBody"] {
+        background-color: var(--marfim) !important; border: 1px solid var(--filete) !important; border-radius: 2px !important;
+    }
+    div[class*="st-key-pop_"] button {
+        background-color: transparent !important; color: var(--floresta) !important;
+        border: none !important; border-bottom: 1px solid rgba(168,131,74,0.22) !important;
+        box-shadow: none !important; justify-content: flex-start !important; border-radius: 0 !important;
+    }
+    div[class*="st-key-pop_"] button p { color: var(--floresta) !important; text-align: left; }
+    div[class*="st-key-pop_"] button:hover { background-color: rgba(168,131,74,0.10) !important; }
+    div[class*="st-key-pop_"] button:disabled { opacity: 0.45; }
+
+    /* Atalho "Levar ao Treinador" dentro da resposta pronta do Mentor */
+    div[class*="st-key-acao_levar"] {
+        border-top: 1px solid rgba(168,131,74,0.30); padding-top: 0.9rem; margin-top: 0.4rem;
+    }
+    div[class*="st-key-acao_levar"] button {
+        width: auto !important; padding: 0.6rem 1.3rem !important;
+        background-color: var(--floresta) !important; color: #F1E6CC !important;
+    }
+    div[class*="st-key-acao_levar"] button p { color: #F1E6CC !important; }
 
     /* Janela do histórico */
     div[role="dialog"] {
@@ -356,6 +396,18 @@ st.markdown("""
         .st-key-btn_logout div[data-testid="stButton"],
         div[class*="st-key-btn_historico"] div[data-testid="stButton"] { justify-content: flex-start !important; }
         .stButton>button { min-height: 46px; }
+        .espaco-menu-conversas, .espaco-hist-treino { height: 0; }
+        /* menu principal: as duas abas lado a lado, texto em até 2 linhas */
+        .st-key-menu_principal div[role="radiogroup"] { flex-wrap: nowrap !important; }
+        .st-key-menu_principal div[role="radiogroup"] label {
+            flex: 1 1 0; justify-content: center; text-align: center; padding: 0.6rem 0.3rem !important;
+        }
+        .st-key-menu_principal div[role="radiogroup"] label p {
+            white-space: normal !important; text-align: center; line-height: 1.35; font-size: 0.66rem !important;
+        }
+        .st-key-menu_principal { margin-bottom: 1rem; }
+        div[data-testid="stChatMessage"] { padding: 0.8rem 0.8rem; }
+        div[class*="st-key-acao_levar"] button { width: 100% !important; }
         .st-key-menu_principal div[role="radiogroup"] label,
         .st-key-etapa_radio_main div[role="radiogroup"] label { padding: 0.6rem 0.8rem; }
         .st-key-menu_principal div[role="radiogroup"] label p,
@@ -1138,16 +1190,19 @@ if menu_atual == MENU_MENTOR:
             "O Mentor",
             "Ainda não tem uma resposta pronta? Converse à vontade: o mentor faz perguntas sobre a sua "
             "trajetória, encontra os melhores exemplos e monta a resposta com você. Quando ela estiver "
-            "pronta, leve-a ao Treinador para receber o parecer técnico.",
+            "pronta, um botão aparece na própria resposta para levá-la ao Treinador.",
         )
     with col_h:
-        st.markdown("<div style='height:1.4rem'></div>", unsafe_allow_html=True)
-        if st.button("Histórico do Mentor", key="btn_historico_mentor"):
-            st.session_state["_exc_pendente"] = None
-            dialog_historico_mentor()
-        if ss["chat_livre"] and st.button("Nova conversa", key="btn_historico_nova"):
-            nova_conversa_mentor()
-            st.rerun()
+        st.markdown("<div class='espaco-menu-conversas'></div>", unsafe_allow_html=True)
+        # Um único menu reúne as ações da conversa (evita vários botões soltos)
+        with st.container(key="menu_conversas"):
+            with st.popover("☰  Conversas", use_container_width=True):
+                if st.button("✦  Nova conversa", key="pop_nova_conversa", disabled=not ss["chat_livre"]):
+                    nova_conversa_mentor()
+                    st.rerun()
+                if st.button("✦  Histórico de conversas", key="pop_hist_mentor"):
+                    st.session_state["_exc_pendente"] = None
+                    dialog_historico_mentor()
 
     vaga = vaga_ativa()
     col_a, col_b = st.columns([1.6, 1], gap="medium")
@@ -1169,12 +1224,24 @@ if menu_atual == MENU_MENTOR:
 
     mensagens = ss["chat_livre"]
 
-    for msg in mensagens:
+    # A última resposta do mentor que trouxer a "resposta pronta" ganha o atalho para o Treinador
+    idx_pronta = None
+    for i in range(len(mensagens) - 1, -1, -1):
+        if mensagens[i]["role"] == "assistant":
+            if extrair_resposta_pronta(mensagens[i]["content"]):
+                idx_pronta = i
+            break
+
+    for i, msg in enumerate(mensagens):
         avatar = avatar_ia() if msg["role"] == "assistant" else None
         with st.chat_message(msg["role"], avatar=avatar):
             st.markdown(msg["content"])
+            if i == idx_pronta:
+                with st.container(key="acao_levar"):
+                    if st.button("Levar ao Treinador  ➔", key="btn_levar_treino"):
+                        levar_para_treinador(extrair_resposta_pronta(msg["content"]), pergunta_foco)
 
-    digitado = st.chat_input("Conte ao mentor sobre uma experiência, uma dúvida ou a vaga que você quer...", key="mentor_input")
+    digitado = st.chat_input("Converse com o mentor...", key="mentor_input")
     prompt = digitado
 
     if prompt:
@@ -1194,28 +1261,6 @@ if menu_atual == MENU_MENTOR:
             mensagens.append({"role": "assistant", "content": str(resposta)})
             salvar_progresso_banco(ss["usuario_logado"])  # também atualiza o histórico do Mentor
             st.rerun()
-
-    if any(m["role"] == "assistant" for m in mensagens):
-        ultima_ia = next(m["content"] for m in reversed(mensagens) if m["role"] == "assistant")
-        pronta = extrair_resposta_pronta(ultima_ia)
-        st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
-        with st.container(border=True, key="moldura_1"):
-            st.markdown("<p class='kicker'>Do rascunho ao treino</p><h4 style='margin-top:0.2rem;'>Levar para o Treinador</h4>", unsafe_allow_html=True)
-            if pronta:
-                st.caption("O mentor montou a resposta abaixo. Ajuste o que quiser antes de levar.")
-            else:
-                st.caption("Quando o mentor entregar a resposta pronta, ela aparece aqui. Você também pode escrever ou colar a sua.")
-            rascunho = st.text_area(
-                "Sua resposta", value=pronta, height=200,
-                key=f"rascunho_mentor_{len(mensagens)}", label_visibility="collapsed",
-            )
-            c1, _ = st.columns([1.4, 1], gap="small")
-            with c1:
-                if st.button("Levar para o Treinador ➔", key="btn_levar_treino"):
-                    if not rascunho.strip():
-                        st.warning("Escreva ou peça ao mentor uma resposta antes de levar ao Treinador.")
-                    else:
-                        levar_para_treinador(rascunho.strip(), pergunta_foco)
 
     st.stop()
 
@@ -1244,7 +1289,7 @@ with col_et:
         key="etapa_radio_main"
     )
 with col_ht:
-    st.markdown("<div style='height:1.6rem'></div>", unsafe_allow_html=True)
+    st.markdown("<div class='espaco-hist-treino'></div>", unsafe_allow_html=True)
     if st.button("Histórico do Treinador", key="btn_historico"):
         st.session_state["_exc_pendente"] = None
         dialog_historico()
