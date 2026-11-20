@@ -32,11 +32,6 @@ ROTULOS_MENU = {
     MENU_TREINO: "✦  Treinador · simulação",
 }
 PERGUNTA_LIVRE = "Ainda não sei · conversa livre"
-SUGESTOES_MENTOR = [
-    "Não tenho uma resposta pronta para “fale sobre você”. Pode me ajudar a montar?",
-    "Preciso de um exemplo de trabalho em equipe, mas não sei qual história contar.",
-    "Me explique o método STAR com um exemplo e depois me ajude a aplicar no meu caso.",
-]
 
 # ============================================================
 # CONFIGURAÇÃO DE PÁGINA E DESIGN EDITORIAL CLEAN
@@ -1168,26 +1163,11 @@ if menu_atual == MENU_MENTOR:
                 f"Considerar a vaga {c.get('empresa', '')} — {c.get('cargo', '')}",
                 value=True, key="mentor_usar_vaga",
             )
-        else:
-            st.caption("Dica: cadastrando a vaga na Etapa 1 do Treinador, o mentor personaliza as sugestões.")
     pergunta_foco = None if foco == PERGUNTA_LIVRE else foco
 
     st.markdown(ornamento("❦"), unsafe_allow_html=True)
 
     mensagens = ss["chat_livre"]
-    prompt = None
-
-    if not mensagens:
-        st.markdown(
-            "<p style='text-align:center; font-family:Lora, serif; font-size:1.15rem; font-weight:400; "
-            "font-style:italic; color:#5E5547; margin-bottom:1rem;'>Por onde gostaria de começar?</p>",
-            unsafe_allow_html=True,
-        )
-        cols = st.columns(len(SUGESTOES_MENTOR), gap="small")
-        for i, (col, sug) in enumerate(zip(cols, SUGESTOES_MENTOR)):
-            with col:
-                if st.button(sug, key=f"sug_{i}"):
-                    prompt = sug
 
     for msg in mensagens:
         avatar = avatar_ia() if msg["role"] == "assistant" else None
@@ -1195,7 +1175,7 @@ if menu_atual == MENU_MENTOR:
             st.markdown(msg["content"])
 
     digitado = st.chat_input("Conte ao mentor sobre uma experiência, uma dúvida ou a vaga que você quer...", key="mentor_input")
-    prompt = digitado or prompt
+    prompt = digitado
 
     if prompt:
         mensagens.append({"role": "user", "content": prompt})
