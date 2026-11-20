@@ -142,6 +142,7 @@ using **Claude (Anthropic)** as a coding copilot.
 
 | Feature | What it does |
 |---|---|
+| 🧭 **Free mentor chat** | Before training, talk to an AI mentor that asks about your background, finds your best examples and builds the answer with you, then sends it to the trainer in one click |
 | 🏢 **Job context** | Stores company, role, job description, culture and your résumé (PDF, DOCX or TXT) to personalize every evaluation |
 | 🗂️ **Curated questions** | Each question comes with the **suggested methodology** and the **evaluator's focus** (what the recruiter is really looking for) |
 | 🎙️ **Text or audio answers** | Type your answer or record it directly in the browser |
@@ -355,6 +356,7 @@ volta, usando o **Claude (Anthropic)** como copiloto de código.
 
 | Funcionalidade | O que faz |
 |---|---|
+| 🧭 **Mentor (conversa livre)** | Antes do treino, converse com um mentor de IA que pergunta sobre a sua trajetória, encontra os melhores exemplos e monta a resposta com você, levando-a ao Treinador com um clique |
 | 🏢 **Contexto da vaga** | Guarda empresa, cargo, descrição, cultura e seu currículo (PDF, DOCX ou TXT) para personalizar cada avaliação |
 | 🗂️ **Perguntas curadas** | Cada pergunta traz a **metodologia sugerida** e o **foco do avaliador** (o que o recrutador realmente busca) |
 | 🎙️ **Resposta em texto ou áudio** | Digite a resposta ou grave direto no navegador |

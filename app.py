@@ -5,7 +5,10 @@ from datetime import datetime
 import streamlit as st
 from supabase import create_client, Client
 from curadoria import PERGUNTAS_CURATORIA
-from gemini_engine import get_client, avaliar_resposta_completa, stream_chat_lapidacao
+from gemini_engine import (
+    get_client, avaliar_resposta_completa, stream_chat_lapidacao,
+    stream_chat_mentor, extrair_resposta_pronta, resposta_falhou,
+)
 
 # Leitura opcional de arquivos de currículo
 try:
@@ -22,6 +25,19 @@ ETAPA_1 = "1. Contexto da Vaga"
 ETAPA_2 = "2. Painel de Simulação"
 ETAPA_3 = "3. Lapidação & Feedback"
 
+MENU_MENTOR = "Mentor"
+MENU_TREINO = "Treinador"
+ROTULOS_MENU = {
+    MENU_MENTOR: "✦  Mentor · conversa livre",
+    MENU_TREINO: "✦  Treinador · simulação",
+}
+PERGUNTA_LIVRE = "Ainda não sei · conversa livre"
+SUGESTOES_MENTOR = [
+    "Não tenho uma resposta pronta para “fale sobre você”. Pode me ajudar a montar?",
+    "Preciso de um exemplo de trabalho em equipe, mas não sei qual história contar.",
+    "Me explique o método STAR com um exemplo e depois me ajude a aplicar no meu caso.",
+]
+
 # ============================================================
 # CONFIGURAÇÃO DE PÁGINA E DESIGN EDITORIAL CLEAN
 # ============================================================
@@ -34,168 +50,296 @@ st.set_page_config(
 
 st.markdown("""
 <style>
-    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,400&family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Cinzel:wght@400;500;600&family=Jost:wght@300;400;500&display=swap');
 
-    .stApp {
-        background-color: #F8F6F0;
-        color: #2C2A29;
-        font-family: 'Plus Jakarta Sans', sans-serif;
+    :root {
+        --floresta: #111E16;
+        --musgo: #233A2C;
+        --pergaminho: #F4EEE1;
+        --marfim: #FBF8F1;
+        --ouro: #A8834A;
+        --ouro-claro: #C9A96E;
+        --tinta: #2B2620;
+        --sepia: #7A6F5E;
+        --vinho: #6E2A26;
+        --filete: rgba(168, 131, 74, 0.38);
     }
+
+    /* ---------- Base: papel envelhecido ---------- */
+    .stApp {
+        background-color: var(--pergaminho);
+        background-image:
+            radial-gradient(ellipse at top, rgba(255,252,244,0.85) 0%, rgba(244,238,225,0) 60%),
+            radial-gradient(ellipse at bottom, rgba(168,131,74,0.10) 0%, rgba(244,238,225,0) 55%),
+            repeating-linear-gradient(0deg, rgba(120,100,70,0.018) 0px, rgba(120,100,70,0.018) 1px, transparent 1px, transparent 3px);
+        color: var(--tinta);
+        font-family: 'Jost', sans-serif;
+        font-weight: 300;
+    }
+    .stApp p, .stApp li, .stApp label, .stMarkdown { font-family: 'Jost', sans-serif; }
+    h1 span, h2 span, h3 span, h4 span { font-family: inherit !important; }
+    .block-container { padding-top: 4.6rem; max-width: 1180px; }
 
     h1, h2, h3, h4 {
-        font-family: 'Playfair Display', serif !important;
-        color: #111E16 !important;
-        letter-spacing: -0.02em;
+        font-family: 'Cormorant Garamond', serif !important;
+        color: var(--floresta) !important;
+        font-weight: 600 !important;
+        letter-spacing: 0.01em;
+    }
+    h3 { font-size: 2rem !important; font-style: italic; font-weight: 500 !important; }
+    h4 { font-size: 1.35rem !important; }
+    strong, b { font-weight: 500; color: var(--floresta); }
+
+    /* Rótulos dos campos em versalete */
+    [data-testid="stWidgetLabel"] p {
+        font-family: 'Cinzel', serif !important;
+        font-size: 0.74rem !important;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--musgo) !important;
+        font-weight: 500;
     }
 
-    /* Containers com borda */
-    div[data-testid="stVerticalBlockBorderWrapper"] {
-        background-color: #FFFFFF;
-        border-color: #E6E1D7 !important;
-        border-radius: 8px;
-        box-shadow: 0 4px 20px rgba(0,0,0,0.03);
+    /* Elementos decorativos */
+    .kicker {
+        font-family: 'Cinzel', serif;
+        letter-spacing: 0.32em;
+        text-transform: uppercase;
+        font-size: 0.72rem;
+        color: var(--ouro);
+        margin: 0;
     }
+    .ornamento {
+        display: flex; align-items: center; gap: 14px;
+        color: var(--ouro); margin: 1.1rem auto 1.6rem auto; max-width: 100%;
+    }
+    .ornamento::before, .ornamento::after {
+        content: ""; flex: 1; height: 1px;
+        background: linear-gradient(90deg, transparent, var(--ouro-claro), transparent);
+    }
+    .ornamento span { font-size: 0.8rem; letter-spacing: 0.6em; padding-left: 0.6em; }
+    .intro-secao { color: var(--sepia); font-size: 0.98rem; margin: -0.4rem 0 1.4rem 0; line-height: 1.6; }
 
-    /* Botão principal */
+    /* ---------- Cartões com moldura dupla ---------- */
+    div[data-testid="stVerticalBlockBorderWrapper"], div[class*="st-key-moldura"] {
+        background-color: var(--marfim);
+        border: 1px solid var(--filete) !important;
+        border-radius: 2px;
+        box-shadow: inset 0 0 0 5px var(--marfim), inset 0 0 0 6px rgba(168,131,74,0.22),
+                    0 10px 30px rgba(60, 45, 20, 0.06);
+    }
+    .cartao-metodo {
+        background: var(--marfim);
+        border: 1px solid var(--filete);
+        border-left: 3px solid var(--ouro);
+        padding: 16px 20px; margin: 10px 0 22px 0;
+    }
+    .cartao-metodo .rot {
+        font-family: 'Cinzel', serif; font-size: 0.72rem; letter-spacing: 0.16em; color: var(--floresta);
+    }
+    .cartao-metodo .txt { font-size: 0.95rem; color: #4A4236; }
+
+    /* ---------- Botões ---------- */
     .stButton>button {
-        background-color: #111E16;
-        color: #FBF9F5;
-        border: 1px solid #111E16;
-        border-radius: 4px;
-        padding: 0.65rem 1.4rem;
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        font-weight: 600;
-        font-size: 0.92rem;
+        background-color: var(--floresta);
+        color: #F1E6CC;
+        border: 1px solid var(--ouro);
+        border-radius: 1px;
+        padding: 0.7rem 1.5rem;
+        font-family: 'Cinzel', serif;
+        font-weight: 500;
+        font-size: 0.78rem;
+        letter-spacing: 0.16em;
+        text-transform: uppercase;
         width: 100%;
-        transition: all 0.25s ease;
+        box-shadow: inset 0 0 0 3px var(--floresta), inset 0 0 0 4px rgba(201,169,110,0.35);
+        transition: all 0.3s ease;
     }
     .stButton>button:hover {
-        background-color: #233A2C;
-        border-color: #233A2C;
-        color: #FFFFFF;
+        background-color: var(--musgo);
+        border-color: var(--ouro-claro);
+        color: #FFF8E7;
+        box-shadow: inset 0 0 0 3px var(--musgo), inset 0 0 0 4px rgba(201,169,110,0.6);
     }
+    .stButton>button p { font-family: 'Cinzel', serif !important; }
 
     /* Contêiner dos botões ocupa a coluna toda (para o alinhamento funcionar) */
-    .st-key-btn_toggle_cad,
-    .st-key-btn_voltar_login1,
-    .st-key-btn_voltar_login2,
-    .st-key-btn_logout,
-    .st-key-btn_historico {
-        width: 100% !important;
-        max-width: 100% !important;
+    .st-key-btn_toggle_cad, .st-key-btn_voltar_login1, .st-key-btn_voltar_login2,
+    .st-key-btn_logout, .st-key-btn_historico {
+        width: 100% !important; max-width: 100% !important;
     }
     .st-key-btn_toggle_cad div[data-testid="stButton"],
     .st-key-btn_voltar_login1 div[data-testid="stButton"],
     .st-key-btn_voltar_login2 div[data-testid="stButton"] {
-        display: flex !important;
-        justify-content: center !important;
-        width: 100% !important;
+        display: flex !important; justify-content: center !important; width: 100% !important;
     }
     .st-key-btn_logout div[data-testid="stButton"],
     .st-key-btn_historico div[data-testid="stButton"] {
-        display: flex !important;
-        justify-content: flex-end !important;
-        width: 100% !important;
+        display: flex !important; justify-content: flex-end !important; width: 100% !important;
     }
 
-    /* Botões secundários (cinza) */
-    .st-key-btn_toggle_cad button,
-    .st-key-btn_voltar_login1 button,
-    .st-key-btn_voltar_login2 button {
-        background-color: #E6E1D7 !important;
-        color: #111E16 !important;
-        border: 1px solid #DCD6CD !important;
-        width: 260px !important;
-        max-width: 100% !important;
+    /* Botões secundários: contorno dourado */
+    .st-key-btn_toggle_cad button, .st-key-btn_voltar_login1 button, .st-key-btn_voltar_login2 button,
+    .st-key-btn_historico button, .st-key-btn_logout button,
+    div[class*="st-key-sec_"] button, div[class*="st-key-sug_"] button, div[class*="st-key-nao_"] button {
+        background-color: transparent !important;
+        color: var(--floresta) !important;
+        border: 1px solid var(--filete) !important;
+        box-shadow: none !important;
     }
-    .st-key-btn_historico button {
-        background-color: #E6E1D7 !important;
-        color: #111E16 !important;
-        border: 1px solid #DCD6CD !important;
+    .st-key-btn_toggle_cad button, .st-key-btn_voltar_login1 button, .st-key-btn_voltar_login2 button {
+        width: 260px !important; max-width: 100% !important;
     }
-    .st-key-btn_toggle_cad button:hover,
-    .st-key-btn_voltar_login1 button:hover,
-    .st-key-btn_voltar_login2 button:hover,
-    .st-key-btn_historico button:hover {
-        background-color: #DCD6CD !important;
-        color: #111E16 !important;
-        border-color: #C8C2B7 !important;
+    .st-key-btn_toggle_cad button:hover, .st-key-btn_voltar_login1 button:hover,
+    .st-key-btn_voltar_login2 button:hover, .st-key-btn_historico button:hover,
+    .st-key-btn_logout button:hover, div[class*="st-key-sec_"] button:hover,
+    div[class*="st-key-sug_"] button:hover, div[class*="st-key-nao_"] button:hover {
+        background-color: rgba(168,131,74,0.10) !important;
+        border-color: var(--ouro) !important;
+        color: var(--floresta) !important;
+    }
+    .st-key-btn_logout button, .st-key-btn_historico button {
+        width: auto !important; padding: 0.45rem 1.1rem;
     }
 
-    /* Sair da Sessão e Histórico: abaixo do nome, à direita, largura do texto */
-    .st-key-btn_logout button,
-    .st-key-btn_historico button {
-        width: auto !important;
-        padding: 0.45rem 1.1rem;
+    /* Sugestões do mentor: texto corrido, sem caixa alta */
+    div[class*="st-key-sug_"] button {
+        text-transform: none !important; letter-spacing: 0.01em !important;
+        font-family: 'Cormorant Garamond', serif !important; font-size: 1.05rem !important;
+        font-style: italic; min-height: 74px; background-color: var(--marfim) !important;
+    }
+    div[class*="st-key-sug_"] button p {
+        font-family: 'Cormorant Garamond', serif !important; font-size: 1.12rem !important;
+        white-space: normal !important; overflow: visible !important; text-overflow: clip !important;
+        line-height: 1.35;
     }
 
     /* Link 'Esqueci minha senha' */
     .link-esqueci {
-        color: #787267;
-        font-size: 0.88rem;
-        text-decoration: underline;
-        cursor: pointer;
-        transition: color 0.2s ease;
+        color: var(--sepia); font-size: 0.88rem; text-decoration: none;
+        border-bottom: 1px solid var(--filete); cursor: pointer; transition: color 0.2s ease;
     }
-    .link-esqueci:hover { color: #111E16; }
+    .link-esqueci:hover { color: var(--floresta); border-color: var(--ouro); }
 
-    /* Campos de entrada */
-    .stTextInput>div>div>input, .stSelectbox>div>div>div, .stTextArea>div>div>textarea {
-        background-color: #FAFAFA;
-        border: 1px solid #DCD6CD;
-        border-radius: 6px;
-        color: #2C2A29;
-        font-size: 0.95rem;
+    /* ---------- Campos ---------- */
+    div[data-baseweb="input"], div[data-baseweb="textarea"], div[data-baseweb="select"] > div,
+    .stTextInput>div>div>input, .stTextArea>div>div>textarea {
+        background-color: var(--marfim) !important;
+        border: 1px solid var(--filete) !important;
+        border-radius: 1px !important;
+        color: var(--tinta);
+        font-family: 'Jost', sans-serif;
+        font-size: 0.97rem;
     }
+    div[data-baseweb="input"] input, div[data-baseweb="textarea"] textarea { background-color: transparent !important; }
+    div[data-baseweb="input"]:focus-within, div[data-baseweb="textarea"]:focus-within,
     .stTextInput>div>div>input:focus, .stTextArea>div>div>textarea:focus {
-        border-color: #111E16;
-        box-shadow: 0 0 0 1px #111E16;
+        border-color: var(--ouro) !important;
+        box-shadow: 0 0 0 1px var(--ouro) !important;
+    }
+    div[data-testid="stTextAreaRootElement"], div[data-testid="stTextAreaRootElement"] > div,
+    div[data-baseweb="textarea"] > div { background-color: var(--marfim) !important; }
+
+    /* Avisos (info, sucesso, alerta) no tom do papel */
+    div[data-testid="stAlert"] > div, div[data-testid="stAlertContainer"] {
+        background-color: var(--marfim) !important;
+        border: 1px solid var(--filete) !important;
+        border-left: 3px solid var(--ouro) !important;
+        border-radius: 1px !important;
+        color: var(--tinta) !important;
+    }
+    div[data-testid="stAlert"] p, div[data-testid="stAlertContainer"] p { color: var(--tinta) !important; }
+    div[data-testid="stAlertContentError"] p, div[data-testid="stAlertContentWarning"] p { color: var(--vinho) !important; }
+
+    section[data-testid="stFileUploaderDropzone"],
+    div[data-testid="stFileUploaderDropzone"] {
+        background-color: var(--marfim) !important; border: 1px dashed var(--ouro-claro) !important; border-radius: 1px !important;
     }
 
-    /* Botões de exclusão (discretos, em tom rosado/vermelho suave) */
+    /* ---------- Menu principal e etapas como abas clássicas ---------- */
+    .st-key-menu_principal div[role="radiogroup"],
+    .st-key-etapa_radio_main div[role="radiogroup"] {
+        gap: 0 !important; border-bottom: 1px solid var(--filete); flex-wrap: wrap;
+    }
+    /* esconde as bolinhas do rádio (versões novas e antigas do Streamlit) */
+    .st-key-menu_principal label[data-testid="stRadioOption"] > div > div:first-child:not([data-testid]),
+    .st-key-etapa_radio_main label[data-testid="stRadioOption"] > div > div:first-child:not([data-testid]),
+    .st-key-menu_principal div[role="radiogroup"] label > div:first-child:not(:has(p)),
+    .st-key-etapa_radio_main div[role="radiogroup"] label > div:first-child:not(:has(p)) { display: none !important; }
+    .st-key-menu_principal div[role="radiogroup"] label,
+    .st-key-etapa_radio_main div[role="radiogroup"] label {
+        padding: 0.7rem 1.6rem 0.6rem 1.6rem; margin: 0 !important;
+        border-bottom: 2px solid transparent; cursor: pointer; transition: all 0.25s ease;
+    }
+    .st-key-menu_principal div[role="radiogroup"] label p,
+    .st-key-etapa_radio_main div[role="radiogroup"] label p {
+        font-family: 'Cinzel', serif !important; letter-spacing: 0.18em; text-transform: uppercase;
+        font-size: 0.8rem !important; color: var(--sepia);
+    }
+    .st-key-menu_principal div[role="radiogroup"] label:has(input:checked),
+    .st-key-etapa_radio_main div[role="radiogroup"] label:has(input:checked) {
+        border-bottom-color: var(--ouro);
+        background: linear-gradient(180deg, transparent, rgba(168,131,74,0.08));
+    }
+    .st-key-menu_principal div[role="radiogroup"] label:has(input:checked) p,
+    .st-key-etapa_radio_main div[role="radiogroup"] label:has(input:checked) p { color: var(--floresta); font-weight: 600; }
+    .st-key-menu_principal { margin-bottom: 1.6rem; }
+    .st-key-menu_principal div[role="radiogroup"] label p { font-size: 0.9rem !important; }
+    .st-key-etapa_radio_main { margin-bottom: 1.2rem; }
+
+    /* ---------- Chat ---------- */
+    div[data-testid="stChatMessage"] {
+        background-color: var(--marfim);
+        border: 1px solid rgba(168,131,74,0.22);
+        border-radius: 2px;
+        padding: 1rem 1.2rem;
+    }
+    div[data-testid="stChatMessage"]:has(div[data-testid="stChatMessageAvatarUser"]) {
+        background-color: rgba(35,58,44,0.05);
+    }
+    div[data-testid="stChatMessage"] img { border-radius: 50%; }
+    div[data-testid="stChatInput"] textarea { font-family: 'Jost', sans-serif; }
+    div[data-testid="stChatInput"] > div { border-color: var(--filete) !important; border-radius: 2px !important; background: var(--marfim); }
+
+    /* Abas internas (Histórico) e expanders */
+    button[data-baseweb="tab"] p { font-family: 'Cinzel', serif !important; letter-spacing: 0.1em; font-size: 0.78rem !important; }
+    div[data-baseweb="tab-highlight"] { background-color: var(--ouro) !important; }
+    div[data-testid="stExpander"] details { border: 1px solid var(--filete); border-radius: 2px; background: var(--marfim); }
+
+    /* Botões de exclusão (discretos, em vinho) */
     div[class*="st-key-exc_"] button {
-        background-color: #F6E7E5 !important;
-        color: #8A2E2A !important;
-        border: 1px solid #E8C9C5 !important;
+        background-color: transparent !important; color: var(--vinho) !important;
+        border: 1px solid rgba(110,42,38,0.35) !important; box-shadow: none !important;
     }
-    div[class*="st-key-exc_"] button:hover {
-        background-color: #F0D5D1 !important;
-        border-color: #DDB3AE !important;
-    }
+    div[class*="st-key-exc_"] button:hover { background-color: rgba(110,42,38,0.07) !important; }
     div[class*="st-key-sim_"] button {
-        background-color: #8A2E2A !important;
-        color: #FFFFFF !important;
-        border: 1px solid #8A2E2A !important;
+        background-color: var(--vinho) !important; color: #FFF8E7 !important;
+        border: 1px solid var(--vinho) !important; box-shadow: none !important;
     }
-    div[class*="st-key-sim_"] button:hover {
-        background-color: #702420 !important;
-    }
-    div[class*="st-key-nao_"] button {
-        background-color: #E6E1D7 !important;
-        color: #111E16 !important;
-        border: 1px solid #DCD6CD !important;
-    }
+    div[class*="st-key-sim_"] button:hover { background-color: #571F1C !important; }
 
     .ident-conectado { text-align: right; padding-top: 0.8rem; margin-bottom: 0.4rem; }
+    .ident-conectado .nome { font-family: 'Cormorant Garamond', serif; font-size: 1.35rem; font-style: italic; color: var(--floresta); }
 
-    /* ===== Versão para celular / tablet ===== */
+    /* ===== Celular / tablet ===== */
     @media (max-width: 768px) {
-        /* 16px nos campos evita o zoom automático do iPhone ao digitar */
         .stTextInput input, .stTextArea textarea { font-size: 16px !important; }
     }
     @media (max-width: 640px) {
         .block-container { padding: 2.5rem 1rem 5rem 1rem !important; }
-        h3 { font-size: 1.3rem !important; }
-        .titulo-login { font-size: 2.2rem !important; }
-        .kicker-login { letter-spacing: 1.5px !important; font-size: 0.68rem !important; }
-        .titulo-app { font-size: 1.7rem !important; }
-        .subtitulo-app { font-size: 0.8rem !important; }
+        h3 { font-size: 1.6rem !important; }
+        .titulo-login { font-size: 2.6rem !important; }
+        .kicker { letter-spacing: 0.18em !important; font-size: 0.64rem !important; }
+        .titulo-app { font-size: 2rem !important; }
+        .subtitulo-app { font-size: 0.85rem !important; }
         .ident-conectado { text-align: left !important; padding-top: 0.4rem !important; }
         .st-key-btn_logout div[data-testid="stButton"],
         .st-key-btn_historico div[data-testid="stButton"] { justify-content: flex-start !important; }
-        /* alvos de toque maiores */
         .stButton>button { min-height: 46px; }
-        div[data-testid="stRadio"] label p { font-size: 0.88rem !important; }
+        .st-key-menu_principal div[role="radiogroup"] label,
+        .st-key-etapa_radio_main div[role="radiogroup"] label { padding: 0.6rem 0.8rem; }
+        .st-key-menu_principal div[role="radiogroup"] label p,
+        .st-key-etapa_radio_main div[role="radiogroup"] label p { font-size: 0.68rem !important; letter-spacing: 0.1em; }
     }
 
     #MainMenu {visibility: hidden;}
@@ -259,6 +403,23 @@ def logo_html(tamanho):
         f'<img src="data:image/png;base64,{b64}" '
         f'style="width:{tamanho}px;height:{tamanho}px;border-radius:50%;'
         f'box-shadow:0 2px 12px rgba(120,100,90,0.18);opacity:0.95;">'
+    )
+
+
+def avatar_ia():
+    caminho = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icone.png")
+    return caminho if os.path.exists(caminho) else None
+
+
+def ornamento(simbolo="✦ ✦ ✦"):
+    return f'<div class="ornamento"><span>{simbolo}</span></div>'
+
+
+def cabecalho_secao(kicker, titulo, intro):
+    st.markdown(
+        f'<p class="kicker">{kicker}</p><h3 style="margin-top:0.2rem;">{titulo}</h3>'
+        f'<p class="intro-secao">{intro}</p>',
+        unsafe_allow_html=True,
     )
 
 
@@ -391,6 +552,7 @@ def carregar_sessao(user, email):
     ctx = dict(user.get("contexto_vaga") or {})
     historico = ctx.pop("_historico", None)
     ativa = ctx.pop("_vaga_ativa", None)
+    ss["chat_livre"] = list(ctx.pop("_chat_livre", None) or [])
 
     if historico is None:
         historico = []
@@ -426,6 +588,7 @@ def carregar_sessao(user, email):
     else:
         limpar_vaga_ativa()
     ss["etapa_radio_main"] = ETAPA_1
+    ss["menu_principal"] = MENU_MENTOR
 
 
 def salvar_progresso_banco(email):
@@ -433,6 +596,7 @@ def salvar_progresso_banco(email):
     ctx = dict(ss.get("contexto_vaga", {}))
     ctx["_historico"] = ss.get("historico", [])
     ctx["_vaga_ativa"] = ss.get("vaga_ativa_id")
+    ctx["_chat_livre"] = ss.get("chat_livre", [])[-80:]  # conversa do Mentor (últimas 80 mensagens)
     vaga = vaga_ativa()
     dados = {
         "contexto_vaga": ctx,
@@ -468,6 +632,7 @@ def sincronizar_conversa():
 def ir_para_etapa(nome_etapa):
     """Agenda a troca de etapa; é aplicada no próximo rerun, antes do radio ser criado."""
     st.session_state["_ir_para_etapa"] = nome_etapa
+    st.session_state["_ir_para_menu"] = MENU_TREINO
     st.rerun()
 
 
@@ -662,8 +827,10 @@ if not st.session_state["usuario_logado"]:
     st.markdown(f"""
     <div style="text-align: center; padding: 2rem 0 1.5rem 0;">
         <div style="margin-bottom: 1.1rem;">{logo_html(88)}</div>
-        <p class="kicker-login" style="letter-spacing: 3px; font-size: 0.8rem; text-transform: uppercase; color: #787267; font-weight: 600;">— Plataforma de Treinamento para Entrevista —</p>
-        <h1 class="titulo-login" style="font-size: 3.2rem; font-style: italic; margin-top: 0.2rem; margin-bottom: 0;">Interview Lab AI</h1>
+        <p class="kicker">Atelier de Entrevistas · Est. MMXXVI</p>
+        <h1 class="titulo-login" style="font-size: 4rem; font-style: italic; font-weight: 500 !important; margin: 0.3rem 0 0 0; line-height: 1.05;">Interview Lab AI</h1>
+        <p style="font-family: 'Cormorant Garamond', serif; font-size: 1.25rem; font-style: italic; color: #7A6F5E; margin-top: 0.4rem;">A arte de contar a sua trajetória</p>
+        <div style="max-width: 320px; margin: 0 auto;">{ornamento()}</div>
     </div>
     """, unsafe_allow_html=True)
 
@@ -700,8 +867,8 @@ if not st.session_state["usuario_logado"]:
 
             st.markdown("""
             <div style="margin: 2rem 0 0.5rem 0; text-align: center;">
-                <hr style="border: none; border-top: 1px solid #E6E1D7; margin-bottom: 1.5rem;">
-                <p style="font-size: 0.88rem; color: #787267; margin-bottom: 0.4rem;">Ainda não possui um acesso?</p>
+                <hr style="border: none; border-top: 1px solid rgba(168,131,74,0.38); margin-bottom: 1.5rem;">
+                <p style="font-size: 0.92rem; color: #7A6F5E; margin-bottom: 0.4rem; font-family: 'Cormorant Garamond', serif; font-style: italic;">Ainda não possui um acesso?</p>
             </div>
             """, unsafe_allow_html=True)
 
@@ -727,6 +894,7 @@ if not st.session_state["usuario_logado"]:
                             st.session_state["usuario_logado"] = novo_email
                             st.session_state["usuario_nome"] = novo_nome
                             st.session_state["historico"] = []
+                            st.session_state["chat_livre"] = []
                             limpar_vaga_ativa()
                             st.session_state["etapa_radio_main"] = ETAPA_1
                             st.rerun()
@@ -743,7 +911,7 @@ if not st.session_state["usuario_logado"]:
         # MODO 3: REDEFINIR SENHA
         elif st.session_state["auth_mode"] == "recuperar":
             st.markdown("<h3 style='text-align: center; margin-bottom: 0.5rem; font-size: 1.5rem;'>Recuperar Senha</h3>", unsafe_allow_html=True)
-            st.markdown("<p style='text-align: center; font-size: 0.88rem; color: #6B655C; margin-bottom: 1.5rem;'>Informe seu e-mail cadastrado para receber o link de redefinição.</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; font-size: 0.88rem; color: #7A6F5E; margin-bottom: 1.5rem;'>Informe seu e-mail cadastrado para receber o link de redefinição.</p>", unsafe_allow_html=True)
 
             email_recup = st.text_input("E-mail cadastrado", key="recup_email")
 
@@ -772,18 +940,19 @@ col_head1, col_head2 = st.columns([4, 1.4])
 with col_head1:
     st.markdown(f"""
     <div style="display: flex; align-items: center; flex-wrap: wrap; gap: 16px; padding: 0.5rem 0 0.2rem 0;">
-        {logo_html(60)}
+        {logo_html(72)}
         <div>
-            <h1 class="titulo-app" style="font-size: 2.3rem; margin-bottom: 0px;">Interview Lab AI</h1>
-            <p class="subtitulo-app" style="color: #787267; font-size: 0.95rem; margin-top: -4px;">Laboratório de Simulação e Lapidação Narrativa para Entrevistas</p>
+            <p class="kicker">Atelier de Entrevistas</p>
+            <h1 class="titulo-app" style="font-size: 2.7rem; font-style: italic; font-weight: 500 !important; margin: 0; line-height: 1.1;">Interview Lab AI</h1>
+            <p class="subtitulo-app" style="color: #7A6F5E; font-size: 1.1rem; margin-top: 0; font-family: 'Cormorant Garamond', serif; font-style: italic;">Simulação e lapidação narrativa para entrevistas</p>
         </div>
     </div>
     """, unsafe_allow_html=True)
 with col_head2:
     st.markdown(
         f"<div class='ident-conectado'>"
-        f"<span style='font-size: 0.85rem; color: #787267;'>Candidato Conectado</span><br>"
-        f"<b>{st.session_state.get('usuario_nome', 'Candidato')}</b></div>",
+        f"<span class='kicker' style='font-size:0.62rem;'>Bem-vindo(a)</span><br>"
+        f"<span class='nome'>{st.session_state.get('usuario_nome', 'Candidato')}</span></div>",
         unsafe_allow_html=True
     )
     if st.button("Sair da Sessão", key="btn_logout"):
@@ -797,7 +966,7 @@ with col_head2:
         st.session_state["_exc_pendente"] = None
         dialog_historico()
 
-st.markdown("<hr style='border: none; border-top: 1px solid #E6E1D7; margin: 0.8rem 0 1.5rem 0;'>", unsafe_allow_html=True)
+st.markdown("<div style='height:0.6rem'></div>", unsafe_allow_html=True)
 
 # Validação do Cliente Gemini
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
@@ -806,6 +975,134 @@ if not api_key:
     st.stop()
 
 client = get_client(api_key)
+
+
+# ============================================================
+# MENU PRINCIPAL: MENTOR (conversa livre) | TREINADOR (etapas)
+# ============================================================
+ss = st.session_state
+ss.setdefault("chat_livre", [])
+destino_menu = ss.pop("_ir_para_menu", None)
+if destino_menu in ROTULOS_MENU:
+    ss["menu_principal"] = destino_menu
+if ss.get("menu_principal") not in ROTULOS_MENU:
+    ss["menu_principal"] = MENU_MENTOR
+
+menu_atual = st.radio(
+    "Menu",
+    options=list(ROTULOS_MENU),
+    format_func=lambda m: ROTULOS_MENU[m],
+    horizontal=True,
+    key="menu_principal",
+    label_visibility="collapsed",
+)
+
+
+def levar_para_treinador(texto, pergunta):
+    """Guarda o rascunho e abre o Treinador (Etapa 2, ou Etapa 1 se ainda não há vaga)."""
+    ss["_rascunho_e2"] = texto
+    ss["_pergunta_e2"] = pergunta
+    ir_para_etapa(ETAPA_2 if ss.get("etapa1_concluida") else ETAPA_1)
+
+
+if menu_atual == MENU_MENTOR:
+    cabecalho_secao(
+        "Antes do treino",
+        "O Mentor",
+        "Ainda não tem uma resposta pronta? Converse à vontade: o mentor faz perguntas sobre a sua "
+        "trajetória, encontra os melhores exemplos e monta a resposta com você. Quando ela estiver "
+        "pronta, leve-a ao Treinador para receber o parecer técnico.",
+    )
+
+    vaga = vaga_ativa()
+    col_a, col_b = st.columns([1.6, 1], gap="medium")
+    with col_a:
+        opcoes_foco = [PERGUNTA_LIVRE] + list(PERGUNTAS_CURATORIA.keys())
+        foco = st.selectbox("Pergunta que você quer preparar", opcoes_foco, key="mentor_pergunta")
+    with col_b:
+        usar_vaga = False
+        if vaga:
+            st.markdown("<div style='height:1.9rem'></div>", unsafe_allow_html=True)
+            c = vaga["contexto"]
+            usar_vaga = st.checkbox(
+                f"Considerar a vaga {c.get('empresa', '')} — {c.get('cargo', '')}",
+                value=True, key="mentor_usar_vaga",
+            )
+        else:
+            st.caption("Dica: cadastrando a vaga na Etapa 1 do Treinador, o mentor personaliza as sugestões.")
+    pergunta_foco = None if foco == PERGUNTA_LIVRE else foco
+
+    st.markdown(ornamento("❦"), unsafe_allow_html=True)
+
+    mensagens = ss["chat_livre"]
+    prompt = None
+
+    if not mensagens:
+        st.markdown(
+            "<p style='text-align:center; font-family:Cormorant Garamond, serif; font-size:1.3rem; "
+            "font-style:italic; color:#7A6F5E; margin-bottom:1rem;'>Por onde gostaria de começar?</p>",
+            unsafe_allow_html=True,
+        )
+        cols = st.columns(len(SUGESTOES_MENTOR), gap="small")
+        for i, (col, sug) in enumerate(zip(cols, SUGESTOES_MENTOR)):
+            with col:
+                if st.button(sug, key=f"sug_{i}"):
+                    prompt = sug
+
+    for msg in mensagens:
+        avatar = avatar_ia() if msg["role"] == "assistant" else None
+        with st.chat_message(msg["role"], avatar=avatar):
+            st.markdown(msg["content"])
+
+    digitado = st.chat_input("Conte ao mentor sobre uma experiência, uma dúvida ou a vaga que você quer...", key="mentor_input")
+    prompt = digitado or prompt
+
+    if prompt:
+        mensagens.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+        with st.chat_message("assistant", avatar=avatar_ia()):
+            resposta = st.write_stream(stream_chat_mentor(
+                client=client,
+                historico_mensagens=mensagens,
+                contexto_vaga=vaga["contexto"] if (vaga and usar_vaga) else None,
+                pergunta_foco=pergunta_foco,
+            ))
+        if resposta_falhou(resposta):
+            mensagens.pop()  # não salva a falha; dá para tentar de novo
+        else:
+            mensagens.append({"role": "assistant", "content": str(resposta)})
+            salvar_progresso_banco(ss["usuario_logado"])
+            st.rerun()
+
+    if any(m["role"] == "assistant" for m in mensagens):
+        ultima_ia = next(m["content"] for m in reversed(mensagens) if m["role"] == "assistant")
+        pronta = extrair_resposta_pronta(ultima_ia)
+        st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+        with st.container(border=True, key="moldura_1"):
+            st.markdown("<p class='kicker'>Do rascunho ao treino</p><h4 style='margin-top:0.2rem;'>Levar para o Treinador</h4>", unsafe_allow_html=True)
+            if pronta:
+                st.caption("O mentor montou a resposta abaixo. Ajuste o que quiser antes de levar.")
+            else:
+                st.caption("Quando o mentor entregar a resposta pronta, ela aparece aqui. Você também pode escrever ou colar a sua.")
+            rascunho = st.text_area(
+                "Sua resposta", value=pronta, height=200,
+                key=f"rascunho_mentor_{len(mensagens)}", label_visibility="collapsed",
+            )
+            c1, c2 = st.columns([1.4, 1], gap="small")
+            with c1:
+                if st.button("Levar para o Treinador ➔", key="btn_levar_treino"):
+                    if not rascunho.strip():
+                        st.warning("Escreva ou peça ao mentor uma resposta antes de levar ao Treinador.")
+                    else:
+                        levar_para_treinador(rascunho.strip(), pergunta_foco)
+            with c2:
+                if st.button("Nova conversa", key="sec_nova_conversa"):
+                    ss["chat_livre"] = []
+                    salvar_progresso_banco(ss["usuario_logado"])
+                    st.rerun()
+
+    st.stop()
 
 # ============================================================
 # GERENCIAMENTO DAS ETAPAS (navegação automática)
@@ -834,8 +1131,10 @@ etapa_atual = st.radio(
 # ETAPA 1 — CONTEXTO DA VAGA
 # ============================================================
 if etapa_atual == ETAPA_1:
-    st.markdown("<h3>Etapa 1 — Contexto da Vaga & Perfil</h3>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #6B655C; font-size: 0.92rem; margin-bottom: 1.5rem;'>Insira os detalhes estratégicos do cargo pretendido. A IA utilizará esses dados para personalizar a avaliação.</p>", unsafe_allow_html=True)
+    cabecalho_secao("Etapa I", "Contexto da Vaga & Perfil",
+                    "Insira os detalhes estratégicos do cargo pretendido. A IA utilizará esses dados para personalizar a avaliação.")
+    if st.session_state.get("_rascunho_e2"):
+        st.info("A resposta que você montou com o Mentor está guardada. Cadastre a vaga e ela aparecerá na Etapa 2, pronta para avaliar.")
 
     ctx = st.session_state.get("contexto_vaga", {})
 
@@ -892,17 +1191,29 @@ elif etapa_atual == ETAPA_2:
         if st.button("⬅ Voltar para Contexto da Vaga", key="btn_voltar_e1"):
             ir_para_etapa(ETAPA_1)
 
-    st.markdown("<h3>Etapa 2 — Simulação & Avaliação Técnica</h3>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #6B655C; font-size: 0.92rem; margin-bottom: 1.5rem;'>Selecione uma pergunta técnica ou comportamental e responda via texto ou áudio.</p>", unsafe_allow_html=True)
+    cabecalho_secao("Etapa II", "Simulação & Avaliação Técnica",
+                    "Selecione uma pergunta técnica ou comportamental e responda via texto ou áudio.")
 
     lista_perguntas = list(PERGUNTAS_CURATORIA.keys())
-    pergunta_selecionada = st.selectbox("Escolha a Pergunta para Simular:", options=lista_perguntas)
+
+    # Rascunho vindo do Mentor: preenche a resposta (e a pergunta, se foi escolhida lá)
+    rascunho_mentor = st.session_state.pop("_rascunho_e2", None)
+    pergunta_mentor = st.session_state.pop("_pergunta_e2", None)
+    if rascunho_mentor:
+        st.session_state["resp_texto_e2"] = rascunho_mentor
+        st.session_state["tipo_resp_radio"] = "Texto"
+        if pergunta_mentor in lista_perguntas:
+            st.session_state["pergunta_e2"] = pergunta_mentor
+        st.success("Resposta trazida do Mentor. Confira a pergunta selecionada e clique em Enviar e Avaliar.")
+
+    pergunta_selecionada = st.selectbox("Escolha a Pergunta para Simular:", options=lista_perguntas, key="pergunta_e2")
     dados_pergunta = PERGUNTAS_CURATORIA[pergunta_selecionada]
 
     st.markdown(f"""
-    <div style="background-color: #FAFAFA; border: 1px solid #E6E1D7; padding: 14px 18px; border-radius: 6px; margin: 10px 0 20px 0;">
-        <span style="font-size: 0.85rem; color: #111E16; font-weight: 700;">METODOLOGIA SUGERIDA:</span> <span style="font-size: 0.88rem; color: #4A453E;">{dados_pergunta['tecnica']}</span><br>
-        <span style="font-size: 0.85rem; color: #111E16; font-weight: 700;">FOCO DO AVALIADOR:</span> <span style="font-size: 0.88rem; color: #4A453E;">{dados_pergunta['expectativa']}</span>
+    <div class="cartao-metodo">
+        <span class="rot">METODOLOGIA SUGERIDA</span><br><span class="txt">{dados_pergunta['tecnica']}</span>
+        <div style="height:0.6rem"></div>
+        <span class="rot">FOCO DO AVALIADOR</span><br><span class="txt">{dados_pergunta['expectativa']}</span>
     </div>
     """, unsafe_allow_html=True)
 
@@ -912,9 +1223,8 @@ elif etapa_atual == ETAPA_2:
     audio_bytes = None
 
     if tipo_resposta == "Texto":
-        resposta_texto = st.text_area("Sua Resposta:", placeholder="Desenvolva sua resposta utilizando a técnica sugerida...", height=180)
+        resposta_texto = st.text_area("Sua Resposta:", placeholder="Desenvolva sua resposta utilizando a técnica sugerida...", height=180, key="resp_texto_e2")
     else:
-        st.markdown("<label style='font-size: 0.9rem; font-weight: 600;'>Grave a sua resposta:</label>", unsafe_allow_html=True)
         audio_input = st.audio_input("Gravador de voz")
         if audio_input:
             audio_bytes = audio_input.read()
@@ -962,8 +1272,8 @@ elif etapa_atual == ETAPA_2:
                 st.rerun()
 
     if st.session_state.get("ultima_avaliacao"):
-        with st.container(border=True):
-            st.markdown("### Último Parecer Técnico Gerado")
+        with st.container(border=True, key="moldura_2"):
+            st.markdown("<p class='kicker'>Parecer</p><h4 style='margin-top:0.2rem;'>Último Parecer Técnico Gerado</h4>", unsafe_allow_html=True)
             st.markdown(parecer_com_pergunta(st.session_state.get("ultima_pergunta"), st.session_state["ultima_avaliacao"]))
 
         if st.button("Avançar para Etapa 3 ➔", key="btn_avancar_e3"):
@@ -978,8 +1288,8 @@ elif etapa_atual == ETAPA_3:
         if st.button("⬅ Voltar para Simulação", key="btn_voltar_e2"):
             ir_para_etapa(ETAPA_2)
 
-    st.markdown("<h3>Etapa 3 — Atelier de Lapidação Narrativa</h3>", unsafe_allow_html=True)
-    st.markdown("<p style='color: #6B655C; font-size: 0.92rem; margin-bottom: 1.5rem;'>Converse com o mentor de inteligência para ajustar métricas, storytelling e pesquisar tendências da empresa no mercado em tempo real.</p>", unsafe_allow_html=True)
+    cabecalho_secao("Etapa III", "Atelier de Lapidação Narrativa",
+                    "Converse com o mentor para ajustar métricas, storytelling e pesquisar tendências da empresa no mercado em tempo real.")
 
     if st.session_state.get("ultima_pergunta"):
         st.caption(f"Conversando sobre: {st.session_state['ultima_pergunta']}")
@@ -988,7 +1298,7 @@ elif etapa_atual == ETAPA_3:
         st.session_state["mensagens_chat"] = []
 
     for msg in st.session_state["mensagens_chat"]:
-        with st.chat_message(msg["role"]):
+        with st.chat_message(msg["role"], avatar=avatar_ia() if msg["role"] == "assistant" else None):
             st.markdown(msg["content"])
 
     prompt_usuario = st.chat_input("Ex: Como posso destacar minha experiência com liderança nessa resposta?")
@@ -997,7 +1307,7 @@ elif etapa_atual == ETAPA_3:
         with st.chat_message("user"):
             st.markdown(prompt_usuario)
 
-        with st.chat_message("assistant"):
+        with st.chat_message("assistant", avatar=avatar_ia()):
             resposta_ia = st.write_stream(
                 stream_chat_lapidacao(
                     client=client,
@@ -1008,7 +1318,7 @@ elif etapa_atual == ETAPA_3:
                 )
             )
 
-        if str(resposta_ia).startswith("Não foi possível gerar a resposta do chat"):
+        if resposta_falhou(resposta_ia):
             # Falha: não salva, para você poder tentar de novo
             st.session_state["mensagens_chat"].pop()
         else:
